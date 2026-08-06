@@ -1,0 +1,102 @@
+{
+  "auth": {
+    "login": "登录",
+    "register": "注册",
+    "codeLogin": "验证码登录",
+    "qrcodeLogin": "二维码登录",
+    "forgetPassword": "忘记密码",
+    "profile": "个人中心"
+  },
+  "dashboard": {
+    "title": "首页",
+    "analytics": "首页",
+    "workspace": "工作台"
+  },
+  "basicConfig": {
+    "title": "基本配置",
+    "cardBin": "卡头验证",
+    "currency": "货币列表",
+    "country": "国家列表"
+  },
+  "merchant": {
+    "title": "商户管理",
+    "list": "商户列表",
+    "group": "商户分组"
+  },
+  "channel": {
+    "title": "通道管理",
+    "list": "通道列表",
+    "account": "通道账号",
+    "group": "通道分组",
+    "assign": "账号分配"
+  },
+  "paypal": {
+    "title": "贝宝管理",
+    "account": "贝宝账号",
+    "order": "贝宝订单",
+    "risk": "贝宝风控"
+  },
+  "tradeStats": {
+    "title": "交易统计",
+    "merchant": "商户统计",
+    "payment": "支付统计",
+    "account": "账号统计"
+  },
+  "trade": {
+    "title": "交易管理",
+    "order": "订单列表",
+    "hold": "扣单列表",
+    "orderLog": "订单日志",
+    "siteBOrder": "B站订单",
+    "batch": "批量处理",
+    "refund": "退款列表",
+    "shoplineRefund": "shopLine退款列表"
+  },
+  "logistics": {
+    "title": "物流管理",
+    "order": "物流订单",
+    "channel": "物流渠道",
+    "track": "物流轨迹"
+  },
+  "site": {
+    "title": "站点管理",
+    "siteA": "A站管理",
+    "siteB": "B站管理",
+    "stripeWordBank": "Stripe单词库"
+  },
+  "risk": {
+    "title": "风险管理",
+    "rule": "风控规则",
+    "blacklist": "黑名单",
+    "whitelist": "白名单",
+    "record": "风控记录",
+    "cardBinRule": "卡头规则"
+  },
+  "email": {
+    "title": "邮件管理",
+    "template": "邮件模板",
+    "record": "发送记录",
+    "config": "邮件配置"
+  },
+  "permission": {
+    "title": "权限管理",
+    "user": "用户管理",
+    "role": "角色管理",
+    "menu": "菜单管理",
+    "operationLog": "操作日志",
+    "loginLog": "登录日志"
+  },
+  "csOrder": {
+    "title": "客服订单",
+    "ticket": "工单列表",
+    "remark": "订单备注",
+    "handleRecord": "客服处理记录"
+  },
+  "quickAction": {
+    "title": "快捷操作",
+    "addMerchant": "新增商户",
+    "addChannel": "新增通道",
+    "viewException": "查看扣单列表",
+    "exportToday": "导出今日订单"
+  }
+}

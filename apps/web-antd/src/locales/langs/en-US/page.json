@@ -1,0 +1,102 @@
+{
+  "auth": {
+    "login": "Login",
+    "register": "Register",
+    "codeLogin": "Code Login",
+    "qrcodeLogin": "Qr Code Login",
+    "forgetPassword": "Forget Password",
+    "profile": "Profile"
+  },
+  "dashboard": {
+    "title": "Home",
+    "analytics": "Home",
+    "workspace": "Workspace"
+  },
+  "basicConfig": {
+    "title": "Basic Config",
+    "cardBin": "Card BIN Verify",
+    "currency": "Currency List",
+    "country": "Country List"
+  },
+  "merchant": {
+    "title": "Merchant",
+    "list": "Merchant List",
+    "group": "Merchant Groups"
+  },
+  "channel": {
+    "title": "Channel",
+    "list": "Channel List",
+    "account": "Channel Accounts",
+    "group": "Channel Groups",
+    "assign": "Account Assign"
+  },
+  "paypal": {
+    "title": "PayPal",
+    "account": "PayPal Accounts",
+    "order": "PayPal Orders",
+    "risk": "PayPal Risk"
+  },
+  "tradeStats": {
+    "title": "Trade Stats",
+    "merchant": "Merchant Stats",
+    "payment": "Payment Stats",
+    "account": "Account Stats"
+  },
+  "trade": {
+    "title": "Trade",
+    "order": "Order List",
+    "hold": "Held Orders",
+    "orderLog": "Order Logs",
+    "siteBOrder": "Site B Orders",
+    "batch": "Batch Process",
+    "refund": "Refund List",
+    "shoplineRefund": "ShopLine Refunds"
+  },
+  "logistics": {
+    "title": "Logistics",
+    "order": "Logistics Orders",
+    "channel": "Logistics Channels",
+    "track": "Tracking"
+  },
+  "site": {
+    "title": "Sites",
+    "siteA": "Site A",
+    "siteB": "Site B",
+    "stripeWordBank": "Stripe Word Bank"
+  },
+  "risk": {
+    "title": "Risk",
+    "rule": "Risk Rules",
+    "blacklist": "Blacklist",
+    "whitelist": "Whitelist",
+    "record": "Risk Records",
+    "cardBinRule": "Card BIN Rules"
+  },
+  "email": {
+    "title": "Email",
+    "template": "Templates",
+    "record": "Send Records",
+    "config": "Email Config"
+  },
+  "permission": {
+    "title": "Permission",
+    "user": "Users",
+    "role": "Roles",
+    "menu": "Menus",
+    "operationLog": "Operation Logs",
+    "loginLog": "Login Logs"
+  },
+  "csOrder": {
+    "title": "CS Orders",
+    "ticket": "Tickets",
+    "remark": "Order Remarks",
+    "handleRecord": "Handle Records"
+  },
+  "quickAction": {
+    "title": "Quick Actions",
+    "addMerchant": "Add Merchant",
+    "addChannel": "Add Channel",
+    "viewException": "View Held Orders",
+    "exportToday": "Export Today"
+  }
+}
