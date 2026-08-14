@@ -4,6 +4,11 @@ import { $t } from '#/locales';
 
 const Placeholder = () => import('#/views/_shared/placeholder.vue');
 
+/**
+ * 业务菜单参考配置。
+ * 当前侧边栏已改为走后端 GET /api/menu/all，本文件不再生成菜单。
+ * 后续加业务页时，可对照这里的 name/path/文案，再写入后端 menus 种子。
+ */
 const routes: RouteRecordRaw[] = [
   {
     meta: {

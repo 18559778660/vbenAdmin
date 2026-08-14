@@ -20,6 +20,7 @@ export const overridesPreferences = defineOverridesPreferences({
   // overrides
   app: {
     authPageLayout: 'panel-center',
+    accessMode: 'backend',
     defaultHomePath: '/dashboard/analytics',
     name: import.meta.env.VITE_APP_TITLE,
   },
