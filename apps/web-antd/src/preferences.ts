@@ -1,5 +1,4 @@
 import {
-  appCopyrightPreferences,
   defineOverridesPreferences,
   definePreferencesExtension,
 } from '@vben/preferences';
@@ -24,7 +23,9 @@ export const overridesPreferences = defineOverridesPreferences({
     defaultHomePath: '/dashboard/analytics',
     name: import.meta.env.VITE_APP_TITLE,
   },
-  copyright: appCopyrightPreferences,
+  copyright: {
+    enable: false,
+  },
 });
 
 export const preferencesExtension =
