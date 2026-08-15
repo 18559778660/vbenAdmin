@@ -42,7 +42,6 @@ const editingId = ref<null | number>(null);
 const typeOptions = [
   { label: '目录', value: 0 },
   { label: '菜单', value: 1 },
-  { label: '按钮', value: 2 },
 ];
 
 const statusOptions = [
@@ -141,7 +140,10 @@ const columns = [
 ];
 
 function typeLabel(type: number) {
-  return typeOptions.find((item) => item.value === type)?.label ?? String(type);
+  if (type === 0) return '目录';
+  if (type === 1) return '菜单';
+  if (type === 2) return '按钮'; // 历史数据可能还有，表单已不可新建
+  return String(type);
 }
 
 function typeColor(type: number) {
