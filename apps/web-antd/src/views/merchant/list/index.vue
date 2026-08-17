@@ -1,5 +1,7 @@
 <script lang="ts" setup>
-import { computed, reactive, ref } from 'vue';
+import type { MerchantApi } from '#/api/merchant';
+
+import { computed, onMounted, reactive, ref } from 'vue';
 
 import { Page } from '@vben/common-ui';
 import { IconifyIcon } from '@vben/icons';
@@ -23,34 +25,13 @@ import {
   Tooltip,
 } from 'ant-design-vue';
 
-defineOptions({ name: 'MerchantList' });
+import {
+  createMerchant,
+  getMerchantList,
+  getMerchantOptions,
+} from '#/api/merchant';
 
-/** 商户列表行（前端 mock，后端对接前本地维护） */
-interface MerchantRow {
-  id: number;
-  name: string;
-  account: string;
-  password: string;
-  contact: string;
-  parentId: null | number;
-  parentName: string;
-  autoShip: boolean;
-  confirmEmail: boolean;
-  status: boolean;
-  limitMode: string;
-  rateDiff: number;
-  holdRate: number;
-  mutualHoldRate: number;
-  holdStatus: number;
-  mutualHoldStatus: number;
-  secretKey: string;
-  auditSiteA: 'auto' | 'manual';
-  createdBy: string;
-  createdAt: string;
-  updatedBy: string;
-  updatedAt: string;
-  starred: boolean;
-}
+defineOptions({ name: 'MerchantList' });
 
 const statusOptions = [
   { label: '全部', value: '' },
@@ -67,11 +48,6 @@ const holdStatusOptions = [
 const emailOptions = [
   { label: '发送', value: 1 },
   { label: '不发送', value: 0 },
-];
-
-const limitModeOptions = [
-  { label: '单一级别', value: 'single' },
-  { label: '多级别', value: 'multi' },
 ];
 
 const searchForm = reactive({
@@ -96,100 +72,8 @@ const createForm = reactive({
 const loading = ref(false);
 const modalOpen = ref(false);
 const saving = ref(false);
-
-const mockList = ref<MerchantRow[]>([
-  {
-    id: 303,
-    name: 'A200',
-    account: 'WIN0303',
-    password: 'xErGvvYzvExY',
-    contact: '',
-    parentId: null,
-    parentName: '-',
-    autoShip: false,
-    confirmEmail: true,
-    status: true,
-    limitMode: 'single',
-    rateDiff: 0,
-    holdRate: 0,
-    mutualHoldRate: 0,
-    holdStatus: 0,
-    mutualHoldStatus: 0,
-    secretKey: '5f7d14a8c2e94b1f9d6e3a7c0b8e2f15',
-    auditSiteA: 'manual',
-    createdBy: 'admin',
-    createdAt: '2024-08-06 15:02:38',
-    updatedBy: 'admin',
-    updatedAt: '2024-08-06 15:02:38',
-    starred: false,
-  },
-  {
-    id: 288,
-    name: 'demo_shop',
-    account: 'merchant288',
-    password: 'DemoPass123',
-    contact: '13800000000',
-    parentId: 303,
-    parentName: 'A200',
-    autoShip: true,
-    confirmEmail: false,
-    status: true,
-    limitMode: 'multi',
-    rateDiff: 2,
-    holdRate: 10,
-    mutualHoldRate: 0,
-    holdStatus: 1,
-    mutualHoldStatus: 0,
-    secretKey: 'a1b2c3d4e5f6789012345678abcdef01',
-    auditSiteA: 'auto',
-    createdBy: 'admin',
-    createdAt: '2025-01-12 10:20:00',
-    updatedBy: 'admin',
-    updatedAt: '2025-03-01 09:11:22',
-    starred: true,
-  },
-]);
-
-const parentOptions = computed(() =>
-  mockList.value.map((item) => ({
-    label: `${item.name}（${item.account}）`,
-    value: item.id,
-  })),
-);
-
-const filteredList = computed(() => {
-  return mockList.value.filter((item) => {
-    if (searchForm.merchant) {
-      const key = searchForm.merchant.trim().toLowerCase();
-      if (!item.name.toLowerCase().includes(key)) {
-        return false;
-      }
-    }
-    // 未选 / 点 X 清空：不按上级过滤
-    if (
-      searchForm.parentId !== undefined &&
-      item.parentId !== searchForm.parentId
-    ) {
-      return false;
-    }
-    if (searchForm.status !== '' && Number(item.status) !== searchForm.status) {
-      return false;
-    }
-    if (
-      searchForm.holdStatus !== '' &&
-      item.holdStatus !== searchForm.holdStatus
-    ) {
-      return false;
-    }
-    if (
-      searchForm.mutualHoldStatus !== '' &&
-      item.mutualHoldStatus !== searchForm.mutualHoldStatus
-    ) {
-      return false;
-    }
-    return true;
-  });
-});
+const list = ref<MerchantApi.Merchant[]>([]);
+const parentOptions = ref<{ label: string; value: number }[]>([]);
 
 const columns = [
   {
@@ -237,24 +121,61 @@ const columns = [
   { title: '更新', key: 'updated', width: 170 },
 ];
 
+const parentSelectOptions = computed(() => parentOptions.value);
+
+function buildQuery(): MerchantApi.ListParams {
+  const params: MerchantApi.ListParams = {};
+  if (searchForm.merchant.trim()) {
+    params.name = searchForm.merchant.trim();
+  }
+  if (searchForm.parentId !== undefined) {
+    params.parentId = searchForm.parentId;
+  }
+  if (searchForm.status !== '') {
+    params.status = searchForm.status;
+  }
+  if (searchForm.holdStatus !== '') {
+    params.holdStatus = searchForm.holdStatus;
+  }
+  if (searchForm.mutualHoldStatus !== '') {
+    params.mutualHoldStatus = searchForm.mutualHoldStatus;
+  }
+  return params;
+}
+
+async function loadList() {
+  loading.value = true;
+  try {
+    list.value = await getMerchantList(buildQuery());
+  } finally {
+    loading.value = false;
+  }
+}
+
+async function loadOptions() {
+  const opts = await getMerchantOptions();
+  parentOptions.value = opts.map((item) => ({
+    label: `${item.name}（${item.account}）`,
+    value: item.id,
+  }));
+}
+
 function resetSearch() {
   searchForm.merchant = '';
   searchForm.parentId = undefined;
   searchForm.status = '';
   searchForm.holdStatus = '';
   searchForm.mutualHoldStatus = '';
+  void loadList();
 }
 
-function handleSearch() {
-  message.success('已按条件筛选（当前为前端 mock）');
+async function handleSearch() {
+  await loadList();
 }
 
-function handleRefresh() {
-  loading.value = true;
-  window.setTimeout(() => {
-    loading.value = false;
-    message.success('已刷新');
-  }, 300);
+async function handleRefresh() {
+  await Promise.all([loadList(), loadOptions()]);
+  message.success('已刷新');
 }
 
 function resetCreateForm() {
@@ -273,14 +194,14 @@ function openCreate() {
   modalOpen.value = true;
 }
 
-function handleCreate() {
+async function handleCreate() {
   const name = createForm.name.trim();
   if (!name) {
     message.warning('请输入商户名');
     return;
   }
-  if (!/^[a-zA-Z0-9]+$/.test(name)) {
-    message.warning('商户名可由英文字母、数字组成');
+  if (!/^[a-zA-Z0-9-]+$/.test(name)) {
+    message.warning('商户名可由英文字母、数字、- 组成');
     return;
   }
   if (createForm.rateDiff < 0 || createForm.rateDiff > 100) {
@@ -289,91 +210,47 @@ function handleCreate() {
   }
 
   saving.value = true;
-  window.setTimeout(() => {
-    const now = formatNow();
-    const id = Math.max(...mockList.value.map((item) => item.id), 0) + 1;
-    mockList.value.unshift({
-      id,
+  try {
+    const created = await createMerchant({
       name,
-      account: `M${String(id).padStart(4, '0')}`,
-      password: randomPassword(),
       contact: createForm.contact.trim(),
-      parentId: null,
-      parentName: '-',
-      autoShip: createForm.autoShip,
-      confirmEmail: createForm.confirmEmail === 1,
-      status: true,
-      limitMode: 'single',
       rateDiff: createForm.rateDiff,
       holdRate: createForm.holdRate,
       mutualHoldRate: createForm.mutualHoldRate,
-      holdStatus: createForm.holdRate > 0 ? 1 : 0,
-      mutualHoldStatus: createForm.mutualHoldRate > 0 ? 1 : 0,
-      secretKey: randomSecret(),
+      confirmEmail: createForm.confirmEmail,
       auditSiteA: createForm.auditSiteA,
-      createdBy: 'admin',
-      createdAt: now,
-      updatedBy: 'admin',
-      updatedAt: now,
-      starred: false,
+      autoShip: createForm.autoShip,
     });
-    saving.value = false;
     modalOpen.value = false;
-    message.success('已新增（仅前端 mock，未调后端）');
-  }, 200);
+    message.success(
+      `创建成功。登录账号：${created.account}，密码：${created.password}`,
+    );
+    await Promise.all([loadList(), loadOptions()]);
+  } finally {
+    saving.value = false;
+  }
 }
 
-function formatNow() {
-  const d = new Date();
-  const pad = (n: number) => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+function onEdit(row: MerchantApi.Merchant) {
+  message.info(`编辑商户 ${row.name}（后续接接口）`);
 }
 
-function randomPassword() {
-  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789';
-  return Array.from(
-    { length: 12 },
-    () => chars[Math.floor(Math.random() * chars.length)],
-  ).join('');
+function onResetPassword(row: MerchantApi.Merchant) {
+  message.info(`重置密码 ${row.name}（后续接接口）`);
 }
 
-function randomSecret() {
-  return Array.from({ length: 32 }, () =>
-    Math.floor(Math.random() * 16).toString(16),
-  ).join('');
-}
-
-function onEdit(row: MerchantRow) {
-  message.info(`编辑商户 ${row.name}（后续接后端）`);
-}
-
-function onResetPassword(row: MerchantRow) {
-  Modal.confirm({
-    title: '重置密码',
-    content: `确认重置商户「${row.name}」的登录密码？当前为前端演示。`,
-    onOk() {
-      row.password = randomPassword();
-      row.updatedAt = formatNow();
-      row.updatedBy = 'admin';
-      message.success('密码已重置（mock）');
-    },
-  });
-}
-
-function onToggleStar(row: MerchantRow) {
+function onToggleStar(row: MerchantApi.Merchant) {
   row.starred = !row.starred;
+  message.info('星标暂仅前端切换，后续接接口');
 }
 
-function limitModeLabel(value: string) {
-  return limitModeOptions.find((item) => item.value === value)?.label ?? value;
-}
+onMounted(async () => {
+  await Promise.all([loadList(), loadOptions()]);
+});
 </script>
 
 <template>
-  <Page
-    auto-content-height
-    description="商户列表（前端 mock，字段按旧系统对齐）"
-  >
+  <Page auto-content-height description="商户列表，新建后可用账号密码登录后台">
     <Card class="mb-4" :bordered="false">
       <Form layout="inline" class="gap-y-3">
         <FormItem label="商户">
@@ -387,7 +264,7 @@ function limitModeLabel(value: string) {
         <FormItem label="上级">
           <Select
             v-model:value="searchForm.parentId"
-            :options="parentOptions"
+            :options="parentSelectOptions"
             allow-clear
             class="w-44"
             placeholder="全部"
@@ -448,7 +325,7 @@ function limitModeLabel(value: string) {
 
       <Table
         :columns="columns"
-        :data-source="filteredList"
+        :data-source="list"
         :loading="loading"
         :pagination="{ pageSize: 10, showSizeChanger: true }"
         :scroll="{ x: 1900 }"
@@ -462,7 +339,7 @@ function limitModeLabel(value: string) {
                 <Button
                   size="small"
                   type="link"
-                  @click="onEdit(record as MerchantRow)"
+                  @click="onEdit(record as MerchantApi.Merchant)"
                 >
                   <IconifyIcon class="size-4" icon="lucide:pencil" />
                 </Button>
@@ -471,7 +348,7 @@ function limitModeLabel(value: string) {
                 <Button
                   size="small"
                   type="link"
-                  @click="onResetPassword(record as MerchantRow)"
+                  @click="onResetPassword(record as MerchantApi.Merchant)"
                 >
                   <IconifyIcon class="size-4" icon="lucide:key-round" />
                 </Button>
@@ -480,11 +357,11 @@ function limitModeLabel(value: string) {
                 <Button
                   size="small"
                   type="link"
-                  @click="onToggleStar(record as MerchantRow)"
+                  @click="onToggleStar(record as MerchantApi.Merchant)"
                 >
                   <IconifyIcon
                     class="size-4"
-                    :icon="record.starred ? 'lucide:star' : 'lucide:star'"
+                    icon="lucide:star"
                     :style="{ color: record.starred ? '#faad14' : undefined }"
                   />
                 </Button>
@@ -501,9 +378,7 @@ function limitModeLabel(value: string) {
             <Switch v-model:checked="record.status" size="small" />
           </template>
           <template v-else-if="column.key === 'limitMode'">
-            <Tag :color="record.limitMode === 'single' ? 'gold' : 'blue'">
-              {{ limitModeLabel(record.limitMode) }}
-            </Tag>
+            <Tag color="gold">{{ record.limitMode || '统一配置' }}</Tag>
           </template>
           <template v-else-if="column.key === 'created'">
             <div class="leading-5">
@@ -537,7 +412,7 @@ function limitModeLabel(value: string) {
         <FormItem label="商户名" required>
           <Input v-model:value="createForm.name" placeholder="请输入商户名" />
           <div class="text-muted-foreground mt-1 text-xs">
-            必填，可由英文字母、数字组成
+            必填，可由英文字母、数字、- 组成
           </div>
         </FormItem>
         <FormItem label="联系方式">
