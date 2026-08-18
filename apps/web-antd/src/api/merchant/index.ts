@@ -138,3 +138,61 @@ export async function uploadMerchantAvatar(file: File) {
     },
   );
 }
+
+export namespace MerchantGroupApi {
+  export interface Merchant {
+    id: number;
+    name: string;
+    account: string;
+  }
+
+  export interface Group {
+    id: number;
+    name: string;
+    merchants: Merchant[];
+    createdBy: string;
+    createdAt: string;
+    updatedBy: string;
+    updatedAt: string;
+  }
+
+  export interface ListParams {
+    id?: number;
+    name?: string;
+  }
+
+  export interface SavePayload {
+    name: string;
+    merchantIds: number[];
+  }
+}
+
+/** 商户分组列表 */
+export async function getMerchantGroupList(
+  params?: MerchantGroupApi.ListParams,
+) {
+  return requestClient.get<MerchantGroupApi.Group[]>('/merchant-groups', {
+    params,
+  });
+}
+
+/** 新建商户分组 */
+export async function createMerchantGroup(data: MerchantGroupApi.SavePayload) {
+  return requestClient.post<MerchantGroupApi.Group>('/merchant-groups', data);
+}
+
+/** 编辑商户分组 */
+export async function updateMerchantGroup(
+  id: number,
+  data: MerchantGroupApi.SavePayload,
+) {
+  return requestClient.put<MerchantGroupApi.Group>(
+    `/merchant-groups/${id}`,
+    data,
+  );
+}
+
+/** 删除商户分组 */
+export async function deleteMerchantGroup(id: number) {
+  return requestClient.delete(`/merchant-groups/${id}`);
+}

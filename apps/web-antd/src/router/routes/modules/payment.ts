@@ -69,7 +69,7 @@ const routes: RouteRecordRaw[] = [
       {
         name: 'MerchantGroup',
         path: 'group',
-        component: Placeholder,
+        component: () => import('#/views/merchant/group/index.vue'),
         meta: {
           icon: 'lucide:folders',
           title: $t('page.merchant.group'),
