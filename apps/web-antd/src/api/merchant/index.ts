@@ -67,3 +67,17 @@ export async function getMerchantOptions() {
 export async function createMerchant(data: MerchantApi.CreatePayload) {
   return requestClient.post<MerchantApi.Merchant>('/merchants', data);
 }
+
+/** 设置星标 */
+export async function setMerchantStarred(id: number, starred: boolean) {
+  return requestClient.put<MerchantApi.Merchant>(`/merchants/${id}/star`, {
+    starred,
+  });
+}
+
+/** 启用/禁用 */
+export async function setMerchantStatus(id: number, status: boolean) {
+  return requestClient.put<MerchantApi.Merchant>(`/merchants/${id}/status`, {
+    status,
+  });
+}

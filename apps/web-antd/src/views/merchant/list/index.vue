@@ -29,6 +29,8 @@ import {
   createMerchant,
   getMerchantList,
   getMerchantOptions,
+  setMerchantStarred,
+  setMerchantStatus,
 } from '#/api/merchant';
 
 defineOptions({ name: 'MerchantList' });
@@ -90,6 +92,7 @@ const columns = [
     fixed: 'left' as const,
   },
   { title: '自动发货', dataIndex: 'autoShip', key: 'autoShip', width: 110 },
+  { title: '审核A站', dataIndex: 'auditSiteA', key: 'auditSiteA', width: 110 },
   { title: '上级商户', dataIndex: 'parentName', key: 'parentName', width: 120 },
   { title: '商户名', dataIndex: 'name', key: 'name', width: 120 },
   { title: '账号', dataIndex: 'account', key: 'account', width: 140 },
@@ -239,9 +242,48 @@ function onResetPassword(row: MerchantApi.Merchant) {
   message.info(`重置密码 ${row.name}（后续接接口）`);
 }
 
-function onToggleStar(row: MerchantApi.Merchant) {
-  row.starred = !row.starred;
-  message.info('星标暂仅前端切换，后续接接口');
+async function copyText(text: string, label = '内容') {
+  if (!text) {
+    message.warning(`暂无${label}`);
+    return;
+  }
+  try {
+    await navigator.clipboard.writeText(text);
+    message.success(`${label}已复制`);
+  } catch {
+    message.error('复制失败');
+  }
+}
+
+async function onToggleStar(row: MerchantApi.Merchant) {
+  const next = !row.starred;
+  try {
+    const updated = await setMerchantStarred(row.id, next);
+    row.starred = updated.starred;
+    row.updatedBy = updated.updatedBy;
+    row.updatedAt = updated.updatedAt;
+    message.success(next ? '已加星标' : '已取消星标');
+  } catch {
+    // 错误提示由请求拦截器处理
+  }
+}
+
+async function onToggleStatus(
+  row: MerchantApi.Merchant,
+  checked: boolean | number | string,
+) {
+  const enabled = Boolean(checked);
+  const prev = row.status;
+  row.status = enabled;
+  try {
+    const updated = await setMerchantStatus(row.id, enabled);
+    row.status = updated.status;
+    row.updatedBy = updated.updatedBy;
+    row.updatedAt = updated.updatedAt;
+    message.success(enabled ? '已启用' : '已禁用');
+  } catch {
+    row.status = prev;
+  }
 }
 
 onMounted(async () => {
@@ -371,14 +413,52 @@ onMounted(async () => {
           <template v-else-if="column.key === 'autoShip'">
             {{ record.autoShip ? '自动发货' : '手动发货' }}
           </template>
+          <template v-else-if="column.key === 'auditSiteA'">
+            {{
+              (record as MerchantApi.Merchant).auditSiteA === 'auto'
+                ? '自动审核'
+                : '手动审核'
+            }}
+          </template>
           <template v-else-if="column.key === 'confirmEmail'">
             <Switch v-model:checked="record.confirmEmail" size="small" />
           </template>
           <template v-else-if="column.key === 'status'">
-            <Switch v-model:checked="record.status" size="small" />
+            <Switch
+              :checked="(record as MerchantApi.Merchant).status"
+              size="small"
+              @change="
+                (checked) =>
+                  onToggleStatus(record as MerchantApi.Merchant, checked)
+              "
+            />
           </template>
           <template v-else-if="column.key === 'limitMode'">
             <Tag color="gold">{{ record.limitMode || '统一配置' }}</Tag>
+          </template>
+          <template v-else-if="column.key === 'secretKey'">
+            <div class="flex min-w-0 items-center gap-1">
+              <span
+                class="truncate"
+                :title="(record as MerchantApi.Merchant).secretKey"
+              >
+                {{ (record as MerchantApi.Merchant).secretKey || '-' }}
+              </span>
+              <Tooltip
+                v-if="(record as MerchantApi.Merchant).secretKey"
+                title="复制密钥"
+              >
+                <Button
+                  size="small"
+                  type="link"
+                  @click="
+                    copyText((record as MerchantApi.Merchant).secretKey, '密钥')
+                  "
+                >
+                  <IconifyIcon class="size-4" icon="lucide:copy" />
+                </Button>
+              </Tooltip>
+            </div>
           </template>
           <template v-else-if="column.key === 'created'">
             <div class="leading-5">
