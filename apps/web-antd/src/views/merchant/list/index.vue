@@ -5,6 +5,7 @@ import { computed, onMounted, reactive, ref } from 'vue';
 
 import { Page } from '@vben/common-ui';
 import { IconifyIcon } from '@vben/icons';
+import { useUserStore } from '@vben/stores';
 
 import {
   Button,
@@ -23,17 +24,25 @@ import {
   Table,
   Tag,
   Tooltip,
+  Upload,
 } from 'ant-design-vue';
 
 import {
   createMerchant,
   getMerchantList,
   getMerchantOptions,
+  merchantLimitModeLabel,
   setMerchantStarred,
   setMerchantStatus,
+  updateMerchant,
+  uploadMerchantAvatar,
 } from '#/api/merchant';
+import { useAuthStore } from '#/store';
 
 defineOptions({ name: 'MerchantList' });
+
+const userStore = useUserStore();
+const authStore = useAuthStore();
 
 const statusOptions = [
   { label: '全部', value: '' },
@@ -74,8 +83,31 @@ const createForm = reactive({
 const loading = ref(false);
 const modalOpen = ref(false);
 const saving = ref(false);
+const editOpen = ref(false);
+const userOpen = ref(false);
 const list = ref<MerchantApi.Merchant[]>([]);
 const parentOptions = ref<{ label: string; value: number }[]>([]);
+const editingId = ref<null | number>(null);
+
+const editForm = reactive({
+  parentId: undefined as number | undefined,
+  name: '',
+  rateDiff: 0,
+  holdRate: 0,
+  mutualHoldRate: 0,
+  confirmEmail: 1,
+  contact: '',
+  auditSiteA: 'manual' as 'auto' | 'manual',
+  autoShip: true,
+});
+
+const userForm = reactive({
+  account: '',
+  nickname: '',
+  password: '',
+  confirmPassword: '',
+  avatar: '',
+});
 
 const columns = [
   {
@@ -88,7 +120,7 @@ const columns = [
   {
     title: '操作',
     key: 'actions',
-    width: 120,
+    width: 140,
     fixed: 'left' as const,
   },
   { title: '自动发货', dataIndex: 'autoShip', key: 'autoShip', width: 110 },
@@ -125,6 +157,10 @@ const columns = [
 ];
 
 const parentSelectOptions = computed(() => parentOptions.value);
+
+const editParentOptions = computed(() =>
+  parentOptions.value.filter((item) => item.value !== editingId.value),
+);
 
 function buildQuery(): MerchantApi.ListParams {
   const params: MerchantApi.ListParams = {};
@@ -235,11 +271,115 @@ async function handleCreate() {
 }
 
 function onEdit(row: MerchantApi.Merchant) {
-  message.info(`编辑商户 ${row.name}（后续接接口）`);
+  editingId.value = row.id;
+  editForm.parentId = row.parentId ?? undefined;
+  editForm.name = row.name;
+  editForm.rateDiff = row.rateDiff;
+  editForm.holdRate = row.holdRate;
+  editForm.mutualHoldRate = row.mutualHoldRate;
+  editForm.confirmEmail = row.confirmEmail ? 1 : 0;
+  editForm.contact = row.contact || '';
+  editForm.auditSiteA = row.auditSiteA === 'auto' ? 'auto' : 'manual';
+  editForm.autoShip = row.autoShip;
+  editOpen.value = true;
 }
 
-function onResetPassword(row: MerchantApi.Merchant) {
-  message.info(`重置密码 ${row.name}（后续接接口）`);
+async function handleEdit() {
+  if (editingId.value === null) {
+    return;
+  }
+  const name = editForm.name.trim();
+  if (!name) {
+    message.warning('请输入商户名');
+    return;
+  }
+  if (!/^[a-zA-Z0-9-]+$/.test(name)) {
+    message.warning('商户名可由英文字母、数字、- 组成');
+    return;
+  }
+  if (editForm.rateDiff < 0 || editForm.rateDiff > 100) {
+    message.warning('汇率偏差范围为 0~100');
+    return;
+  }
+  saving.value = true;
+  try {
+    await updateMerchant(editingId.value, {
+      name,
+      contact: editForm.contact.trim(),
+      parentId: editForm.parentId ?? 0,
+      rateDiff: editForm.rateDiff,
+      holdRate: editForm.holdRate,
+      mutualHoldRate: editForm.mutualHoldRate,
+      confirmEmail: editForm.confirmEmail,
+      auditSiteA: editForm.auditSiteA,
+      autoShip: editForm.autoShip,
+    });
+    editOpen.value = false;
+    message.success('保存成功');
+    await Promise.all([loadList(), loadOptions()]);
+  } finally {
+    saving.value = false;
+  }
+}
+
+function onEditUser(row: MerchantApi.Merchant) {
+  editingId.value = row.id;
+  userForm.account = row.account;
+  userForm.nickname = row.nickname || row.name;
+  userForm.password = '';
+  userForm.confirmPassword = '';
+  userForm.avatar = row.avatar || '';
+  userOpen.value = true;
+}
+
+async function beforeAvatarUpload(file: File) {
+  try {
+    const data = await uploadMerchantAvatar(file);
+    userForm.avatar = data.url;
+    message.success('已上传');
+  } catch {
+    // 错误提示由请求拦截器处理
+  }
+  return false;
+}
+
+async function handleEditUser() {
+  if (editingId.value === null) {
+    return;
+  }
+  const nickname = userForm.nickname.trim();
+  if (!nickname) {
+    message.warning('请输入昵称');
+    return;
+  }
+  if (!/^[a-zA-Z0-9-]+$/.test(nickname)) {
+    message.warning('昵称与商户名相同，可由英文字母、数字、- 组成');
+    return;
+  }
+  if (userForm.password.length < 6 || userForm.password.length > 20) {
+    message.warning('密码需为 6-20 位');
+    return;
+  }
+  if (userForm.password !== userForm.confirmPassword) {
+    message.warning('两次输入的密码不一致');
+    return;
+  }
+  saving.value = true;
+  try {
+    await updateMerchant(editingId.value, {
+      nickname,
+      password: userForm.password,
+      avatar: userForm.avatar,
+    });
+    userOpen.value = false;
+    message.success('保存成功');
+    await loadList();
+    if (userStore.userInfo?.username === userForm.account) {
+      await authStore.fetchUserInfo();
+    }
+  } finally {
+    saving.value = false;
+  }
 }
 
 async function copyText(text: string, label = '内容') {
@@ -386,13 +526,13 @@ onMounted(async () => {
                   <IconifyIcon class="size-4" icon="lucide:pencil" />
                 </Button>
               </Tooltip>
-              <Tooltip title="重置密码">
+              <Tooltip title="用户信息">
                 <Button
                   size="small"
                   type="link"
-                  @click="onResetPassword(record as MerchantApi.Merchant)"
+                  @click="onEditUser(record as MerchantApi.Merchant)"
                 >
-                  <IconifyIcon class="size-4" icon="lucide:key-round" />
+                  <IconifyIcon class="size-4" icon="lucide:user" />
                 </Button>
               </Tooltip>
               <Tooltip :title="record.starred ? '取消星标' : '星标'">
@@ -434,7 +574,11 @@ onMounted(async () => {
             />
           </template>
           <template v-else-if="column.key === 'limitMode'">
-            <Tag color="gold">{{ record.limitMode || '统一配置' }}</Tag>
+            <Tag color="gold">
+{{
+              merchantLimitModeLabel((record as MerchantApi.Merchant).limitMode)
+            }}
+</Tag>
           </template>
           <template v-else-if="column.key === 'secretKey'">
             <div class="flex min-w-0 items-center gap-1">
@@ -559,6 +703,153 @@ onMounted(async () => {
             提交
           </Button>
           <Button @click="modalOpen = false">关闭</Button>
+        </Space>
+      </template>
+    </Modal>
+
+    <Modal
+      v-model:open="editOpen"
+      destroy-on-close
+      title="编辑"
+      width="560px"
+      :confirm-loading="saving"
+      @ok="handleEdit"
+    >
+      <Form class="mt-2" layout="vertical">
+        <FormItem label="上级商户">
+          <Select
+            v-model:value="editForm.parentId"
+            :options="editParentOptions"
+            allow-clear
+            class="w-full"
+            placeholder="请选择一项"
+          />
+        </FormItem>
+        <FormItem label="商户名" required>
+          <Input v-model:value="editForm.name" placeholder="请输入商户名" />
+          <div class="text-muted-foreground mt-1 text-xs">
+            必填，可由英文字母、数字、- 组成
+          </div>
+        </FormItem>
+        <FormItem label="汇率偏差">
+          <InputNumber
+            v-model:value="editForm.rateDiff"
+            :max="100"
+            :min="0"
+            class="w-full"
+          />
+          <div class="text-muted-foreground mt-1 text-xs">
+            默认 0，最大值 100。假如设置为 2，当网站货币不为美元时，美元金额 =
+            网站金额 × 汇率 × (100-2)/100
+          </div>
+        </FormItem>
+        <FormItem label="扣单">
+          <InputNumber
+            v-model:value="editForm.holdRate"
+            :min="0"
+            class="w-full"
+          />
+          <div class="text-muted-foreground mt-1 text-xs">
+            默认 0。假如设置为 10，该商户每成功 9 单后的第 10 单会显示失败
+          </div>
+        </FormItem>
+        <FormItem label="互抛扣单">
+          <InputNumber
+            v-model:value="editForm.mutualHoldRate"
+            :min="0"
+            class="w-full"
+          />
+          <div class="text-muted-foreground mt-1 text-xs">
+            默认 0。假如设置为 10，该商户每成功 9 单后的第 10 单会显示失败
+          </div>
+        </FormItem>
+        <FormItem label="邮件">
+          <Select
+            v-model:value="editForm.confirmEmail"
+            :options="emailOptions"
+            class="w-full"
+          />
+          <div class="text-muted-foreground mt-1 text-xs">是否发送确认邮件</div>
+        </FormItem>
+        <FormItem label="联系方式">
+          <Input
+            v-model:value="editForm.contact"
+            placeholder="请输入联系方式"
+          />
+        </FormItem>
+        <FormItem label="审核A站">
+          <RadioGroup v-model:value="editForm.auditSiteA">
+            <Radio value="manual">手动审核</Radio>
+            <Radio value="auto">自动审核</Radio>
+          </RadioGroup>
+        </FormItem>
+        <FormItem label="发货模式">
+          <RadioGroup v-model:value="editForm.autoShip">
+            <Radio :value="true">自动发货</Radio>
+            <Radio :value="false">手动发货</Radio>
+          </RadioGroup>
+        </FormItem>
+      </Form>
+      <template #footer>
+        <Space>
+          <Button type="primary" :loading="saving" @click="handleEdit">
+            提交
+          </Button>
+          <Button @click="editOpen = false">关闭</Button>
+        </Space>
+      </template>
+    </Modal>
+
+    <Modal
+      v-model:open="userOpen"
+      destroy-on-close
+      title="用户信息"
+      width="560px"
+      :confirm-loading="saving"
+      @ok="handleEditUser"
+    >
+      <Form class="mt-2" layout="vertical">
+        <FormItem label="用户名">
+          <div>{{ userForm.account }}</div>
+          <div class="text-muted-foreground mt-1 text-xs">不可更改</div>
+        </FormItem>
+        <FormItem label="昵称">
+          <Input v-model:value="userForm.nickname" placeholder="请输入昵称" />
+          <div class="text-muted-foreground mt-1 text-xs">
+            与商户名相同，可由英文字母、数字、- 组成
+          </div>
+        </FormItem>
+        <FormItem label="密码" required>
+          <Input.Password
+            v-model:value="userForm.password"
+            placeholder="请输入密码"
+          />
+          <div class="text-muted-foreground mt-1 text-xs">必填，6-20 位</div>
+        </FormItem>
+        <FormItem label="确认密码" required>
+          <Input.Password
+            v-model:value="userForm.confirmPassword"
+            placeholder="请输入确认密码"
+          />
+          <div class="text-muted-foreground mt-1 text-xs">必填，6-20 位</div>
+        </FormItem>
+        <FormItem label="头像">
+          <Upload
+            :before-upload="beforeAvatarUpload"
+            :max-count="1"
+            :show-upload-list="false"
+            accept="image/png,image/jpeg,image/gif,image/webp"
+          >
+            <Button type="primary">上传单张图片</Button>
+          </Upload>
+        </FormItem>
+      </Form>
+      <template #footer>
+        <Space>
+          <Button type="primary" :loading="saving" @click="handleEditUser">
+            提交
+          </Button>
+          <Button @click="userOpen = false">关闭</Button>
         </Space>
       </template>
     </Modal>

@@ -1,5 +1,7 @@
 import { defineConfig } from '@vben/vite-config';
 
+const backend = 'http://localhost:8080';
+
 export default defineConfig(async () => {
   return {
     application: {},
@@ -8,7 +10,7 @@ export default defineConfig(async () => {
         proxy: {
           '/api': {
             changeOrigin: true,
-            target: 'http://localhost:8080',
+            target: backend,
             ws: true,
           },
         },

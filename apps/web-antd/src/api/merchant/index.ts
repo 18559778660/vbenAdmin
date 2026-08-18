@@ -21,6 +21,8 @@ export namespace MerchantApi {
     secretKey: string;
     auditSiteA: 'auto' | 'manual';
     starred: boolean;
+    nickname: string;
+    avatar: string;
     createdBy: string;
     createdAt: string;
     updatedBy: string;
@@ -41,6 +43,25 @@ export namespace MerchantApi {
     mutualHoldStatus?: number;
   }
 
+  export interface UpdatePayload {
+    name?: string;
+    contact?: string;
+    parentId?: number;
+    rateDiff?: number;
+    holdRate?: number;
+    mutualHoldRate?: number;
+    confirmEmail?: number;
+    auditSiteA?: 'auto' | 'manual';
+    autoShip?: boolean;
+    nickname?: string;
+    password?: string;
+    avatar?: string;
+  }
+
+  export interface UploadResult {
+    url: string;
+  }
+
   export interface CreatePayload {
     name: string;
     contact?: string;
@@ -51,6 +72,18 @@ export namespace MerchantApi {
     auditSiteA?: 'auto' | 'manual';
     autoShip?: boolean;
   }
+}
+
+/** 限制模式编码 → 展示文案，后续扩展只加这里 */
+export const MERCHANT_LIMIT_MODE_LABELS: Record<string, string> = {
+  unified: '统一配置',
+};
+
+export function merchantLimitModeLabel(code?: string) {
+  if (!code) {
+    return MERCHANT_LIMIT_MODE_LABELS.unified;
+  }
+  return MERCHANT_LIMIT_MODE_LABELS[code] || code;
 }
 
 /** 商户列表 */
@@ -80,4 +113,28 @@ export async function setMerchantStatus(id: number, status: boolean) {
   return requestClient.put<MerchantApi.Merchant>(`/merchants/${id}/status`, {
     status,
   });
+}
+
+/** 编辑商户 / 用户信息 */
+export async function updateMerchant(
+  id: number,
+  data: MerchantApi.UpdatePayload,
+) {
+  return requestClient.put<MerchantApi.Merchant>(`/merchants/${id}`, data);
+}
+
+/** 上传头像 */
+export async function uploadMerchantAvatar(file: File) {
+  const formData = new FormData();
+  formData.append('file', file, file.name);
+  return requestClient.post<MerchantApi.UploadResult>(
+    '/upload/avatar',
+    formData,
+    {
+      headers: {
+        // 交给浏览器带 boundary，不要写成死的 multipart/form-data
+        'Content-Type': undefined,
+      },
+    },
+  );
 }
