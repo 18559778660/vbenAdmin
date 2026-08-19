@@ -16,41 +16,40 @@ import {
   Modal,
   Select,
   Space,
-  Switch,
   Table,
+  Tag,
   Tooltip,
 } from 'ant-design-vue';
 
 import {
-  CARD_BRAND_LABELS,
-  CARD_TYPE_LABELS,
-  COUNTRY_OPTIONS,
-  countryLabel,
+  CARD_BIN_SEARCH_OPTIONS,
+  CARD_LENGTH_OPTIONS,
+  CARD_NAME_OPTIONS,
   createCardBin,
+  emptyBinPrefix,
+  formatBinPrefix,
   mockCardBinList,
-  toOptions,
+  prefixToRegex,
   updateCardBin,
 } from '../shared';
 
 defineOptions({ name: 'CardBinVerify' });
 
 const searchForm = reactive({
-  bin: '',
-  brand: '',
+  field: '',
+  keyword: '',
 });
 
 const applied = reactive({
-  bin: '',
-  brand: '',
+  field: '',
+  keyword: '',
 });
 
 const form = reactive({
-  bin: '',
-  brand: 'visa',
-  cardType: 'credit',
-  bank: '',
-  country: 'US',
-  status: true,
+  code: '',
+  name: '',
+  lengths: [] as number[],
+  prefixes: [emptyBinPrefix()],
 });
 
 const loading = ref(false);
@@ -58,7 +57,9 @@ const saving = ref(false);
 const modalOpen = ref(false);
 const editingId = ref<null | number>(null);
 
-const modalTitle = computed(() => (editingId.value ? '编辑卡头' : '新增卡头'));
+const modalTitle = computed(() =>
+  editingId.value ? '编辑卡类型' : '新增卡类型',
+);
 
 const columns = [
   {
@@ -69,40 +70,42 @@ const columns = [
     fixed: 'left' as const,
   },
   { title: '操作', key: 'actions', width: 80, fixed: 'left' as const },
-  { title: '卡头', dataIndex: 'bin', key: 'bin', width: 120 },
-  { title: '卡组织', key: 'brand', width: 140 },
-  { title: '卡类型', key: 'cardType', width: 120 },
-  { title: '发卡行', dataIndex: 'bank', key: 'bank', width: 160 },
-  { title: '国家', key: 'country', width: 120 },
-  { title: '状态', key: 'status', width: 90 },
-  { title: '更新时间', dataIndex: 'updatedAt', key: 'updatedAt', width: 180 },
-];
-
-const brandFilterOptions = [
-  { label: '全部', value: '' },
-  ...toOptions(CARD_BRAND_LABELS),
+  { title: '缩写', dataIndex: 'code', key: 'code', width: 90 },
+  { title: '名称', dataIndex: 'name', key: 'name', width: 240 },
+  { title: '长度', key: 'lengths', width: 200 },
+  { title: '验证规则', key: 'prefixes', width: 360 },
+  { title: '添加时间', dataIndex: 'createdAt', key: 'createdAt', width: 180 },
+  { title: '添加人', dataIndex: 'createdBy', key: 'createdBy', width: 120 },
+  { title: '操作时间', dataIndex: 'updatedAt', key: 'updatedAt', width: 180 },
+  { title: '操作人', dataIndex: 'updatedBy', key: 'updatedBy', width: 120 },
 ];
 
 const list = computed(() => {
+  const keyword = applied.keyword.toLowerCase();
+  if (!keyword) {
+    return mockCardBinList.value;
+  }
   return mockCardBinList.value.filter((row) => {
-    if (applied.bin && !row.bin.includes(applied.bin)) {
-      return false;
+    const matchCode = row.code.toLowerCase().includes(keyword);
+    const matchName = row.name.toLowerCase().includes(keyword);
+    if (applied.field === 'code') {
+      return matchCode;
     }
-    if (applied.brand && row.brand !== applied.brand) {
-      return false;
+    if (applied.field === 'name') {
+      return matchName;
     }
-    return true;
+    return matchCode || matchName;
   });
 });
 
 function handleSearch() {
-  applied.bin = searchForm.bin.trim();
-  applied.brand = searchForm.brand;
+  applied.field = searchForm.field;
+  applied.keyword = searchForm.keyword.trim();
 }
 
 function resetSearch() {
-  searchForm.bin = '';
-  searchForm.brand = '';
+  searchForm.field = '';
+  searchForm.keyword = '';
   handleSearch();
 }
 
@@ -115,12 +118,10 @@ function handleRefresh() {
 }
 
 function resetForm() {
-  form.bin = '';
-  form.brand = 'visa';
-  form.cardType = 'credit';
-  form.bank = '';
-  form.country = 'US';
-  form.status = true;
+  form.code = '';
+  form.name = '';
+  form.lengths = [];
+  form.prefixes = [emptyBinPrefix()];
 }
 
 function openCreate() {
@@ -131,29 +132,78 @@ function openCreate() {
 
 function onEdit(row: CardBinRow) {
   editingId.value = row.id;
-  form.bin = row.bin;
-  form.brand = row.brand;
-  form.cardType = row.cardType;
-  form.bank = row.bank;
-  form.country = row.country;
-  form.status = row.status;
+  form.code = row.code;
+  form.name = row.name;
+  form.lengths = [...row.lengths];
+  form.prefixes =
+    row.prefixes.length > 0
+      ? row.prefixes.map((item) => ({ ...item }))
+      : [emptyBinPrefix()];
   modalOpen.value = true;
 }
 
-function handleSave() {
-  const bin = form.bin.trim();
-  if (!bin) {
-    message.warning('请输入卡头');
+function addPrefix() {
+  form.prefixes.push(emptyBinPrefix());
+}
+
+function removePrefix(index: number) {
+  if (form.prefixes.length === 1) {
+    form.prefixes[0] = emptyBinPrefix();
     return;
   }
+  form.prefixes.splice(index, 1);
+}
+
+function handleSave() {
+  const code = form.code.trim().toUpperCase();
+  const name = form.name.trim();
+  if (!code) {
+    message.warning('请输入缩写');
+    return;
+  }
+  if (!name) {
+    message.warning('请选择名称');
+    return;
+  }
+
+  const prefixes = [];
+  for (const item of form.prefixes) {
+    const start = item.start.trim();
+    const end = item.end.trim();
+    if (!start && !end) {
+      continue;
+    }
+    if (!/^\d+$/.test(start)) {
+      message.warning('卡头只填数字，例如 62');
+      return;
+    }
+    if (end) {
+      if (!/^\d+$/.test(end)) {
+        message.warning('结束卡头只填数字');
+        return;
+      }
+      if (end.length !== start.length) {
+        message.warning('起始和结束卡头位数要一致，例如 60 至 63');
+        return;
+      }
+      if (Number(end) < Number(start)) {
+        message.warning('结束卡头不能小于起始卡头');
+        return;
+      }
+    }
+    prefixes.push({ start, end });
+  }
+  if (prefixes.length === 0) {
+    message.warning('请至少添加一条卡头规则');
+    return;
+  }
+
   saving.value = true;
   const payload = {
-    bin,
-    brand: form.brand,
-    cardType: form.cardType,
-    bank: form.bank.trim(),
-    country: form.country,
-    status: form.status,
+    code,
+    name,
+    lengths: [...form.lengths].toSorted((a, b) => a - b),
+    prefixes,
   };
   if (editingId.value === null) {
     createCardBin(payload);
@@ -165,30 +215,26 @@ function handleSave() {
   saving.value = false;
   modalOpen.value = false;
 }
-
-function onToggleStatus(row: CardBinRow, checked: boolean | number | string) {
-  row.status = Boolean(checked);
-}
 </script>
 
 <template>
   <Page auto-content-height description="当前为静态预览，数据未接后端">
     <Card class="mb-4" :bordered="false">
       <Form layout="inline" class="gap-y-3">
-        <FormItem label="卡头">
-          <Input
-            v-model:value="searchForm.bin"
-            allow-clear
-            class="w-44"
-            placeholder="请输入卡头"
+        <FormItem label="筛选">
+          <Select
+            v-model:value="searchForm.field"
+            :options="CARD_BIN_SEARCH_OPTIONS"
+            class="w-28"
           />
         </FormItem>
-        <FormItem label="卡组织">
-          <Select
-            v-model:value="searchForm.brand"
-            :options="brandFilterOptions"
-            class="w-40"
-            placeholder="卡组织"
+        <FormItem>
+          <Input
+            v-model:value="searchForm.keyword"
+            allow-clear
+            class="w-52"
+            placeholder="请输入名称/缩写"
+            @press-enter="handleSearch"
           />
         </FormItem>
         <FormItem>
@@ -233,7 +279,7 @@ function onToggleStatus(row: CardBinRow, checked: boolean | number | string) {
         :data-source="list"
         :loading="loading"
         :pagination="{ pageSize: 10, showSizeChanger: true }"
-        :scroll="{ x: 1100 }"
+        :scroll="{ x: 1600 }"
         row-key="id"
         size="middle"
       >
@@ -249,23 +295,21 @@ function onToggleStatus(row: CardBinRow, checked: boolean | number | string) {
               </Button>
             </Tooltip>
           </template>
-          <template v-else-if="column.key === 'brand'">
-            {{ CARD_BRAND_LABELS[record.brand] || record.brand }}
+          <template v-else-if="column.key === 'lengths'">
+            <div class="flex flex-wrap gap-1">
+              <Tag v-for="item in record.lengths" :key="item">{{ item }}</Tag>
+            </div>
           </template>
-          <template v-else-if="column.key === 'cardType'">
-            {{ CARD_TYPE_LABELS[record.cardType] || record.cardType }}
-          </template>
-          <template v-else-if="column.key === 'country'">
-            {{ countryLabel(record.country) }}
-          </template>
-          <template v-else-if="column.key === 'status'">
-            <Switch
-              :checked="record.status"
-              size="small"
-              @change="
-                (checked) => onToggleStatus(record as CardBinRow, checked)
-              "
-            />
+          <template v-else-if="column.key === 'prefixes'">
+            <div class="flex flex-wrap gap-1">
+              <Tooltip
+                v-for="item in record.prefixes"
+                :key="formatBinPrefix(item)"
+                :title="`卡头 ${formatBinPrefix(item)}`"
+              >
+                <Tag>{{ prefixToRegex(item) }}</Tag>
+              </Tooltip>
+            </div>
           </template>
         </template>
       </Table>
@@ -276,48 +320,69 @@ function onToggleStatus(row: CardBinRow, checked: boolean | number | string) {
       :confirm-loading="saving"
       :title="modalTitle"
       destroy-on-close
+      width="640px"
       @ok="handleSave"
     >
       <Form class="mt-2" layout="vertical">
-        <FormItem label="卡头" required>
+        <FormItem label="缩写" required>
           <Input
-            v-model:value="form.bin"
+            v-model:value="form.code"
             allow-clear
-            placeholder="请输入卡头，如 411111"
+            placeholder="如 UP、AE、JCB"
           />
         </FormItem>
-        <FormItem label="卡组织">
+        <FormItem label="名称" required>
           <Select
-            v-model:value="form.brand"
-            :options="toOptions(CARD_BRAND_LABELS)"
-            placeholder="请选择卡组织"
-          />
-        </FormItem>
-        <FormItem label="卡类型">
-          <Select
-            v-model:value="form.cardType"
-            :options="toOptions(CARD_TYPE_LABELS)"
-            placeholder="请选择卡类型"
-          />
-        </FormItem>
-        <FormItem label="发卡行">
-          <Input
-            v-model:value="form.bank"
+            v-model:value="form.name"
+            :options="CARD_NAME_OPTIONS"
             allow-clear
-            placeholder="请输入发卡行"
-          />
-        </FormItem>
-        <FormItem label="国家">
-          <Select
-            v-model:value="form.country"
-            :options="COUNTRY_OPTIONS"
             option-filter-prop="label"
-            placeholder="请选择国家"
+            placeholder="请选择卡名称"
             show-search
           />
         </FormItem>
-        <FormItem label="状态">
-          <Switch v-model:checked="form.status" />
+        <FormItem label="长度">
+          <Select
+            v-model:value="form.lengths"
+            :options="CARD_LENGTH_OPTIONS"
+            allow-clear
+            mode="multiple"
+            placeholder="请选择卡号长度"
+          />
+        </FormItem>
+        <FormItem label="卡头规则">
+          <div class="flex flex-col gap-2">
+            <div
+              v-for="(item, index) in form.prefixes"
+              :key="index"
+              class="flex items-center gap-2"
+            >
+              <Input
+                v-model:value="item.start"
+                allow-clear
+                class="flex-1"
+                placeholder="起始，如 62"
+              />
+              <span class="text-muted-foreground shrink-0">至</span>
+              <Input
+                v-model:value="item.end"
+                allow-clear
+                class="flex-1"
+                placeholder="结束，可不填"
+              />
+              <Button @click="removePrefix(index)">删除</Button>
+            </div>
+            <Button block @click="addPrefix">
+              <template #icon>
+                <IconifyIcon icon="lucide:plus" />
+              </template>
+              添加卡头
+            </Button>
+          </div>
+          <div class="text-muted-foreground mt-1 text-xs">
+            只填卡号开头数字。单个卡头只填起始，例如 62；连续一段再填结束，例如
+            60 至 63。
+          </div>
         </FormItem>
       </Form>
     </Modal>

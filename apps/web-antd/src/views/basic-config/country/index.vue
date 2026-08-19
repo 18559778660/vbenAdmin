@@ -12,33 +12,39 @@ import {
   Form,
   FormItem,
   Input,
+  InputNumber,
   message,
   Modal,
+  Select,
   Space,
-  Switch,
   Table,
   Tooltip,
 } from 'ant-design-vue';
 
-import { createCountry, mockCountryList, updateCountry } from '../shared';
+import {
+  COUNTRY_SEARCH_OPTIONS,
+  countryNameByCode,
+  countrySelectOptions,
+  createCountry,
+  mockCountryList,
+  updateCountry,
+} from '../shared';
 
 defineOptions({ name: 'CountryList' });
 
 const searchForm = reactive({
-  code: '',
-  name: '',
+  field: '',
+  keyword: '',
 });
 
 const applied = reactive({
-  code: '',
-  name: '',
+  field: '',
+  keyword: '',
 });
 
 const form = reactive({
   code: '',
-  name: '',
-  nameEn: '',
-  status: true,
+  cardBinRatio: 99,
 });
 
 const loading = ref(false);
@@ -46,7 +52,18 @@ const saving = ref(false);
 const modalOpen = ref(false);
 const editingId = ref<null | number>(null);
 
-const modalTitle = computed(() => (editingId.value ? '编辑国家' : '新增国家'));
+const modalTitle = computed(() => (editingId.value ? '查看国家' : '新增国家'));
+const allCountryOptions = countrySelectOptions();
+
+const countryOptions = computed(() => {
+  const used = new Set(mockCountryList.value.map((item) => item.code));
+  const current = editingId.value
+    ? mockCountryList.value.find((item) => item.id === editingId.value)?.code
+    : '';
+  return allCountryOptions.filter(
+    (item) => !used.has(item.value) || item.value === current,
+  );
+});
 
 const columns = [
   {
@@ -57,40 +74,37 @@ const columns = [
     fixed: 'left' as const,
   },
   { title: '操作', key: 'actions', width: 80, fixed: 'left' as const },
-  { title: '国家代码', dataIndex: 'code', key: 'code', width: 120 },
-  { title: '中文名', dataIndex: 'name', key: 'name', width: 160 },
-  { title: '英文名', dataIndex: 'nameEn', key: 'nameEn', width: 200 },
-  { title: '状态', key: 'status', width: 90 },
-  { title: '更新时间', dataIndex: 'updatedAt', key: 'updatedAt', width: 180 },
+  { title: '名称', dataIndex: 'name', key: 'name', width: 280 },
+  { title: '2位CODE', dataIndex: 'code', key: 'code', width: 120 },
+  { title: '大卡头占比', key: 'cardBinRatio', width: 140 },
 ];
 
 const list = computed(() => {
+  const keyword = applied.keyword.toLowerCase();
+  if (!keyword) {
+    return mockCountryList.value;
+  }
   return mockCountryList.value.filter((row) => {
-    if (
-      applied.code &&
-      !row.code.toLowerCase().includes(applied.code.toLowerCase())
-    ) {
-      return false;
+    const matchCode = row.code.toLowerCase().includes(keyword);
+    const matchName = row.name.toLowerCase().includes(keyword);
+    if (applied.field === 'code') {
+      return matchCode;
     }
-    if (
-      applied.name &&
-      !row.name.includes(applied.name) &&
-      !row.nameEn.toLowerCase().includes(applied.name.toLowerCase())
-    ) {
-      return false;
+    if (applied.field === 'name') {
+      return matchName;
     }
-    return true;
+    return matchCode || matchName;
   });
 });
 
 function handleSearch() {
-  applied.code = searchForm.code.trim();
-  applied.name = searchForm.name.trim();
+  applied.field = searchForm.field;
+  applied.keyword = searchForm.keyword.trim();
 }
 
 function resetSearch() {
-  searchForm.code = '';
-  searchForm.name = '';
+  searchForm.field = '';
+  searchForm.keyword = '';
   handleSearch();
 }
 
@@ -104,9 +118,7 @@ function handleRefresh() {
 
 function resetForm() {
   form.code = '';
-  form.name = '';
-  form.nameEn = '';
-  form.status = true;
+  form.cardBinRatio = 99;
 }
 
 function openCreate() {
@@ -115,32 +127,31 @@ function openCreate() {
   modalOpen.value = true;
 }
 
-function onEdit(row: CountryRow) {
+function onView(row: CountryRow) {
   editingId.value = row.id;
   form.code = row.code;
-  form.name = row.name;
-  form.nameEn = row.nameEn;
-  form.status = row.status;
+  form.cardBinRatio = row.cardBinRatio;
   modalOpen.value = true;
 }
 
 function handleSave() {
-  const code = form.code.trim().toUpperCase();
-  const name = form.name.trim();
-  if (!code) {
-    message.warning('请输入国家代码');
+  if (!form.code) {
+    message.warning('请选择国家');
     return;
   }
-  if (!name) {
-    message.warning('请输入中文名');
+  if (
+    form.cardBinRatio === null ||
+    form.cardBinRatio === undefined ||
+    form.cardBinRatio < 0
+  ) {
+    message.warning('请输入有效的大卡头占比');
     return;
   }
   saving.value = true;
   const payload = {
-    code,
-    name,
-    nameEn: form.nameEn.trim(),
-    status: form.status,
+    code: form.code,
+    name: countryNameByCode(form.code),
+    cardBinRatio: form.cardBinRatio,
   };
   if (editingId.value === null) {
     createCountry(payload);
@@ -152,30 +163,26 @@ function handleSave() {
   saving.value = false;
   modalOpen.value = false;
 }
-
-function onToggleStatus(row: CountryRow, checked: boolean | number | string) {
-  row.status = Boolean(checked);
-}
 </script>
 
 <template>
   <Page auto-content-height description="当前为静态预览，数据未接后端">
     <Card class="mb-4" :bordered="false">
       <Form layout="inline" class="gap-y-3">
-        <FormItem label="国家代码">
-          <Input
-            v-model:value="searchForm.code"
-            allow-clear
-            class="w-40"
-            placeholder="如 US"
+        <FormItem label="筛选">
+          <Select
+            v-model:value="searchForm.field"
+            :options="COUNTRY_SEARCH_OPTIONS"
+            class="w-32"
           />
         </FormItem>
-        <FormItem label="名称">
+        <FormItem>
           <Input
-            v-model:value="searchForm.name"
+            v-model:value="searchForm.keyword"
             allow-clear
-            class="w-44"
-            placeholder="中文名或英文名"
+            class="w-56"
+            placeholder="请输入名称/2位CODE"
+            @press-enter="handleSearch"
           />
         </FormItem>
         <FormItem>
@@ -220,30 +227,24 @@ function onToggleStatus(row: CountryRow, checked: boolean | number | string) {
         :data-source="list"
         :loading="loading"
         :pagination="{ pageSize: 10, showSizeChanger: true }"
-        :scroll="{ x: 900 }"
+        :scroll="{ x: 800 }"
         row-key="id"
         size="middle"
       >
         <template #bodyCell="{ column, record }">
           <template v-if="column.key === 'actions'">
-            <Tooltip title="编辑">
+            <Tooltip title="查看">
               <Button
                 size="small"
                 type="link"
-                @click="onEdit(record as CountryRow)"
+                @click="onView(record as CountryRow)"
               >
-                <IconifyIcon class="size-4" icon="lucide:pencil" />
+                <IconifyIcon class="size-4" icon="lucide:eye" />
               </Button>
             </Tooltip>
           </template>
-          <template v-else-if="column.key === 'status'">
-            <Switch
-              :checked="record.status"
-              size="small"
-              @change="
-                (checked) => onToggleStatus(record as CountryRow, checked)
-              "
-            />
+          <template v-else-if="column.key === 'cardBinRatio'">
+            {{ Number(record.cardBinRatio).toFixed(2) }}
           </template>
         </template>
       </Table>
@@ -257,25 +258,28 @@ function onToggleStatus(row: CountryRow, checked: boolean | number | string) {
       @ok="handleSave"
     >
       <Form class="mt-2" layout="vertical">
-        <FormItem label="国家代码" required>
-          <Input v-model:value="form.code" allow-clear placeholder="如 US" />
-        </FormItem>
-        <FormItem label="中文名" required>
-          <Input
-            v-model:value="form.name"
-            allow-clear
-            placeholder="请输入中文名"
+        <FormItem label="国家" required>
+          <Select
+            v-model:value="form.code"
+            :disabled="editingId !== null"
+            :options="countryOptions"
+            option-filter-prop="label"
+            placeholder="请选择国家"
+            show-search
           />
+          <div class="text-muted-foreground mt-1 text-xs">
+            从标准国家列表选择，名称和 2 位 CODE 会自动带出
+          </div>
         </FormItem>
-        <FormItem label="英文名">
-          <Input
-            v-model:value="form.nameEn"
-            allow-clear
-            placeholder="请输入英文名"
+        <FormItem label="大卡头占比" required>
+          <InputNumber
+            v-model:value="form.cardBinRatio"
+            :max="100"
+            :min="0"
+            :precision="2"
+            class="w-full"
+            placeholder="请输入大卡头占比"
           />
-        </FormItem>
-        <FormItem label="状态">
-          <Switch v-model:checked="form.status" />
         </FormItem>
       </Form>
     </Modal>

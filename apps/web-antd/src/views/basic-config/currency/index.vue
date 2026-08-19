@@ -15,32 +15,36 @@ import {
   InputNumber,
   message,
   Modal,
+  Select,
   Space,
-  Switch,
   Table,
   Tooltip,
 } from 'ant-design-vue';
 
-import { createCurrency, mockCurrencyList, updateCurrency } from '../shared';
+import {
+  createCurrency,
+  CURRENCY_SEARCH_OPTIONS,
+  currencyNameByCode,
+  currencySelectOptions,
+  mockCurrencyList,
+  updateCurrency,
+} from '../shared';
 
 defineOptions({ name: 'CurrencyList' });
 
 const searchForm = reactive({
-  code: '',
-  name: '',
+  field: '',
+  keyword: '',
 });
 
 const applied = reactive({
-  code: '',
-  name: '',
+  field: '',
+  keyword: '',
 });
 
 const form = reactive({
   code: '',
-  name: '',
-  symbol: '',
-  sort: 0,
-  status: true,
+  rate: 1,
 });
 
 const loading = ref(false);
@@ -49,6 +53,17 @@ const modalOpen = ref(false);
 const editingId = ref<null | number>(null);
 
 const modalTitle = computed(() => (editingId.value ? '编辑货币' : '新增货币'));
+const allCurrencyOptions = currencySelectOptions();
+
+const currencyOptions = computed(() => {
+  const used = new Set(mockCurrencyList.value.map((item) => item.code));
+  const current = editingId.value
+    ? mockCurrencyList.value.find((item) => item.id === editingId.value)?.code
+    : '';
+  return allCurrencyOptions.filter(
+    (item) => !used.has(item.value) || item.value === current,
+  );
+});
 
 const columns = [
   {
@@ -59,37 +74,39 @@ const columns = [
     fixed: 'left' as const,
   },
   { title: '操作', key: 'actions', width: 80, fixed: 'left' as const },
-  { title: '货币代码', dataIndex: 'code', key: 'code', width: 120 },
-  { title: '货币名称', dataIndex: 'name', key: 'name', width: 160 },
-  { title: '符号', dataIndex: 'symbol', key: 'symbol', width: 80 },
-  { title: '排序', dataIndex: 'sort', key: 'sort', width: 80 },
-  { title: '状态', key: 'status', width: 90 },
-  { title: '更新时间', dataIndex: 'updatedAt', key: 'updatedAt', width: 180 },
+  { title: '名称', dataIndex: 'name', key: 'name', width: 180 },
+  { title: 'CODE', dataIndex: 'code', key: 'code', width: 100 },
+  { title: '汇率', key: 'rate', width: 140 },
+  { title: '操作时间', dataIndex: 'updatedAt', key: 'updatedAt', width: 180 },
+  { title: '操作人', dataIndex: 'updatedBy', key: 'updatedBy', width: 120 },
 ];
 
 const list = computed(() => {
+  const keyword = applied.keyword.toLowerCase();
+  if (!keyword) {
+    return mockCurrencyList.value;
+  }
   return mockCurrencyList.value.filter((row) => {
-    if (
-      applied.code &&
-      !row.code.toLowerCase().includes(applied.code.toLowerCase())
-    ) {
-      return false;
+    const matchCode = row.code.toLowerCase().includes(keyword);
+    const matchName = row.name.toLowerCase().includes(keyword);
+    if (applied.field === 'code') {
+      return matchCode;
     }
-    if (applied.name && !row.name.includes(applied.name)) {
-      return false;
+    if (applied.field === 'name') {
+      return matchName;
     }
-    return true;
+    return matchCode || matchName;
   });
 });
 
 function handleSearch() {
-  applied.code = searchForm.code.trim();
-  applied.name = searchForm.name.trim();
+  applied.field = searchForm.field;
+  applied.keyword = searchForm.keyword.trim();
 }
 
 function resetSearch() {
-  searchForm.code = '';
-  searchForm.name = '';
+  searchForm.field = '';
+  searchForm.keyword = '';
   handleSearch();
 }
 
@@ -103,10 +120,7 @@ function handleRefresh() {
 
 function resetForm() {
   form.code = '';
-  form.name = '';
-  form.symbol = '';
-  form.sort = 0;
-  form.status = true;
+  form.rate = 1;
 }
 
 function openCreate() {
@@ -118,31 +132,24 @@ function openCreate() {
 function onEdit(row: CurrencyRow) {
   editingId.value = row.id;
   form.code = row.code;
-  form.name = row.name;
-  form.symbol = row.symbol;
-  form.sort = row.sort;
-  form.status = row.status;
+  form.rate = row.rate;
   modalOpen.value = true;
 }
 
 function handleSave() {
-  const code = form.code.trim().toUpperCase();
-  const name = form.name.trim();
-  if (!code) {
-    message.warning('请输入货币代码');
+  if (!form.code) {
+    message.warning('请选择货币');
     return;
   }
-  if (!name) {
-    message.warning('请输入货币名称');
+  if (form.rate === null || form.rate === undefined || form.rate < 0) {
+    message.warning('请输入有效汇率');
     return;
   }
   saving.value = true;
   const payload = {
-    code,
-    name,
-    symbol: form.symbol.trim(),
-    sort: form.sort,
-    status: form.status,
+    code: form.code,
+    name: currencyNameByCode(form.code),
+    rate: form.rate,
   };
   if (editingId.value === null) {
     createCurrency(payload);
@@ -154,30 +161,26 @@ function handleSave() {
   saving.value = false;
   modalOpen.value = false;
 }
-
-function onToggleStatus(row: CurrencyRow, checked: boolean | number | string) {
-  row.status = Boolean(checked);
-}
 </script>
 
 <template>
   <Page auto-content-height description="当前为静态预览，数据未接后端">
     <Card class="mb-4" :bordered="false">
       <Form layout="inline" class="gap-y-3">
-        <FormItem label="货币代码">
-          <Input
-            v-model:value="searchForm.code"
-            allow-clear
-            class="w-40"
-            placeholder="如 USD"
+        <FormItem label="筛选">
+          <Select
+            v-model:value="searchForm.field"
+            :options="CURRENCY_SEARCH_OPTIONS"
+            class="w-28"
           />
         </FormItem>
-        <FormItem label="货币名称">
+        <FormItem>
           <Input
-            v-model:value="searchForm.name"
+            v-model:value="searchForm.keyword"
             allow-clear
-            class="w-44"
-            placeholder="请输入货币名称"
+            class="w-52"
+            placeholder="请输入名称/CODE"
+            @press-enter="handleSearch"
           />
         </FormItem>
         <FormItem>
@@ -238,14 +241,10 @@ function onToggleStatus(row: CurrencyRow, checked: boolean | number | string) {
               </Button>
             </Tooltip>
           </template>
-          <template v-else-if="column.key === 'status'">
-            <Switch
-              :checked="record.status"
-              size="small"
-              @change="
-                (checked) => onToggleStatus(record as CurrencyRow, checked)
-              "
-            />
+          <template v-else-if="column.key === 'rate'">
+            <Button type="link" @click="onEdit(record as CurrencyRow)">
+              {{ record.rate }}
+            </Button>
           </template>
         </template>
       </Table>
@@ -259,24 +258,27 @@ function onToggleStatus(row: CurrencyRow, checked: boolean | number | string) {
       @ok="handleSave"
     >
       <Form class="mt-2" layout="vertical">
-        <FormItem label="货币代码" required>
-          <Input v-model:value="form.code" allow-clear placeholder="如 USD" />
-        </FormItem>
-        <FormItem label="货币名称" required>
-          <Input
-            v-model:value="form.name"
-            allow-clear
-            placeholder="请输入货币名称"
+        <FormItem label="货币" required>
+          <Select
+            v-model:value="form.code"
+            :disabled="editingId !== null"
+            :options="currencyOptions"
+            option-filter-prop="label"
+            placeholder="请选择货币"
+            show-search
           />
+          <div class="text-muted-foreground mt-1 text-xs">
+            从标准货币列表选择，名称和 CODE 会自动带出
+          </div>
         </FormItem>
-        <FormItem label="符号">
-          <Input v-model:value="form.symbol" allow-clear placeholder="如 $" />
-        </FormItem>
-        <FormItem label="排序">
-          <InputNumber v-model:value="form.sort" :min="0" class="w-full" />
-        </FormItem>
-        <FormItem label="状态">
-          <Switch v-model:checked="form.status" />
+        <FormItem label="汇率" required>
+          <InputNumber
+            v-model:value="form.rate"
+            :min="0"
+            :precision="4"
+            class="w-full"
+            placeholder="请输入汇率"
+          />
         </FormItem>
       </Form>
     </Modal>
