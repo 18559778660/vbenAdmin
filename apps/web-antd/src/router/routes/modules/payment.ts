@@ -89,7 +89,7 @@ const routes: RouteRecordRaw[] = [
       {
         name: 'ChannelList',
         path: 'list',
-        component: Placeholder,
+        component: () => import('#/views/channel/list/index.vue'),
         meta: {
           icon: 'lucide:list',
           title: $t('page.channel.list'),
