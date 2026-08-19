@@ -22,7 +22,7 @@ const routes: RouteRecordRaw[] = [
       {
         name: 'CardBinVerify',
         path: 'card-bin',
-        component: Placeholder,
+        component: () => import('#/views/basic-config/card-bin/index.vue'),
         meta: {
           icon: 'lucide:credit-card',
           title: $t('page.basicConfig.cardBin'),
@@ -31,7 +31,7 @@ const routes: RouteRecordRaw[] = [
       {
         name: 'CurrencyList',
         path: 'currency',
-        component: Placeholder,
+        component: () => import('#/views/basic-config/currency/index.vue'),
         meta: {
           icon: 'lucide:circle-dollar-sign',
           title: $t('page.basicConfig.currency'),
@@ -40,7 +40,7 @@ const routes: RouteRecordRaw[] = [
       {
         name: 'CountryList',
         path: 'country',
-        component: Placeholder,
+        component: () => import('#/views/basic-config/country/index.vue'),
         meta: {
           icon: 'lucide:globe',
           title: $t('page.basicConfig.country'),
