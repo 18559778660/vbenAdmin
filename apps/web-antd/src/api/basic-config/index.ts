@@ -65,6 +65,34 @@ export namespace CurrencyApi {
   }
 }
 
+export namespace CountryApi {
+  export interface Country {
+    id: number;
+    code: string;
+    name: string;
+    cardBinRatio: number;
+    createdBy: string;
+    createdAt: string;
+    updatedBy: string;
+    updatedAt: string;
+  }
+
+  export interface Option {
+    value: string;
+    label: string;
+  }
+
+  export interface ListParams {
+    field?: string;
+    keyword?: string;
+  }
+
+  export interface SavePayload {
+    code: string;
+    cardBinRatio: number;
+  }
+}
+
 export async function getCardTypeList(params?: CardTypeApi.ListParams) {
   return requestClient.get<CardTypeApi.CardType[]>('/card-types', { params });
 }
@@ -105,4 +133,24 @@ export async function updateCurrency(
 
 export async function deleteCurrency(id: number) {
   return requestClient.delete(`/currencies/${id}`);
+}
+
+export async function getCountryList(params?: CountryApi.ListParams) {
+  return requestClient.get<CountryApi.Country[]>('/countries', { params });
+}
+
+export async function getCountryOptions() {
+  return requestClient.get<CountryApi.Option[]>('/countries/options');
+}
+
+export async function createCountry(data: CountryApi.SavePayload) {
+  return requestClient.post<CountryApi.Country>('/countries', data);
+}
+
+export async function updateCountry(id: number, data: CountryApi.SavePayload) {
+  return requestClient.put<CountryApi.Country>(`/countries/${id}`, data);
+}
+
+export async function deleteCountry(id: number) {
+  return requestClient.delete(`/countries/${id}`);
 }

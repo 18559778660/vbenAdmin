@@ -1,7 +1,7 @@
 <script lang="ts" setup>
-import type { CountryRow } from '../shared';
+import type { CountryApi } from '#/api/basic-config';
 
-import { computed, reactive, ref } from 'vue';
+import { computed, onMounted, reactive, ref } from 'vue';
 
 import { Page } from '@vben/common-ui';
 import { IconifyIcon } from '@vben/icons';
@@ -22,13 +22,14 @@ import {
 } from 'ant-design-vue';
 
 import {
-  COUNTRY_SEARCH_OPTIONS,
-  countryNameByCode,
-  countrySelectOptions,
   createCountry,
-  mockCountryList,
+  deleteCountry,
+  getCountryList,
+  getCountryOptions,
   updateCountry,
-} from '../shared';
+} from '#/api/basic-config';
+
+import { COUNTRY_SEARCH_OPTIONS } from '../shared';
 
 defineOptions({ name: 'CountryList' });
 
@@ -37,30 +38,26 @@ const searchForm = reactive({
   keyword: '',
 });
 
-const applied = reactive({
-  field: '',
-  keyword: '',
-});
-
 const form = reactive({
   code: '',
-  cardBinRatio: 99,
+  cardBinRatio: 99 as number | undefined,
 });
 
 const loading = ref(false);
 const saving = ref(false);
 const modalOpen = ref(false);
 const editingId = ref<null | number>(null);
+const list = ref<CountryApi.Country[]>([]);
+const catalogOptions = ref<CountryApi.Option[]>([]);
 
-const modalTitle = computed(() => (editingId.value ? '查看国家' : '新增国家'));
-const allCountryOptions = countrySelectOptions();
+const modalTitle = computed(() => (editingId.value ? '编辑国家' : '新增国家'));
 
 const countryOptions = computed(() => {
-  const used = new Set(mockCountryList.value.map((item) => item.code));
+  const used = new Set(list.value.map((item) => item.code));
   const current = editingId.value
-    ? mockCountryList.value.find((item) => item.id === editingId.value)?.code
+    ? list.value.find((item) => item.id === editingId.value)?.code
     : '';
-  return allCountryOptions.filter(
+  return catalogOptions.value.filter(
     (item) => !used.has(item.value) || item.value === current,
   );
 });
@@ -73,47 +70,50 @@ const columns = [
     width: 80,
     fixed: 'left' as const,
   },
-  { title: '操作', key: 'actions', width: 80, fixed: 'left' as const },
+  { title: '操作', key: 'actions', width: 108, fixed: 'left' as const },
   { title: '名称', dataIndex: 'name', key: 'name', width: 280 },
   { title: '2位CODE', dataIndex: 'code', key: 'code', width: 120 },
   { title: '大卡头占比', key: 'cardBinRatio', width: 140 },
+  { title: '操作时间', dataIndex: 'updatedAt', key: 'updatedAt', width: 180 },
+  { title: '操作人', dataIndex: 'updatedBy', key: 'updatedBy', width: 120 },
 ];
 
-const list = computed(() => {
-  const keyword = applied.keyword.toLowerCase();
-  if (!keyword) {
-    return mockCountryList.value;
+function buildQuery(): CountryApi.ListParams {
+  const params: CountryApi.ListParams = {};
+  if (searchForm.field) {
+    params.field = searchForm.field;
   }
-  return mockCountryList.value.filter((row) => {
-    const matchCode = row.code.toLowerCase().includes(keyword);
-    const matchName = row.name.toLowerCase().includes(keyword);
-    if (applied.field === 'code') {
-      return matchCode;
-    }
-    if (applied.field === 'name') {
-      return matchName;
-    }
-    return matchCode || matchName;
-  });
-});
+  if (searchForm.keyword.trim()) {
+    params.keyword = searchForm.keyword.trim();
+  }
+  return params;
+}
+
+async function loadOptions() {
+  catalogOptions.value = await getCountryOptions();
+}
+
+async function loadList() {
+  loading.value = true;
+  try {
+    list.value = await getCountryList(buildQuery());
+  } finally {
+    loading.value = false;
+  }
+}
 
 function handleSearch() {
-  applied.field = searchForm.field;
-  applied.keyword = searchForm.keyword.trim();
+  void loadList();
 }
 
 function resetSearch() {
   searchForm.field = '';
   searchForm.keyword = '';
-  handleSearch();
+  void loadList();
 }
 
 function handleRefresh() {
-  loading.value = true;
-  window.setTimeout(() => {
-    loading.value = false;
-    message.success('已刷新（静态数据）');
-  }, 300);
+  void loadList();
 }
 
 function resetForm() {
@@ -127,46 +127,71 @@ function openCreate() {
   modalOpen.value = true;
 }
 
-function onView(row: CountryRow) {
+function onEdit(row: CountryApi.Country) {
   editingId.value = row.id;
   form.code = row.code;
   form.cardBinRatio = row.cardBinRatio;
   modalOpen.value = true;
 }
 
-function handleSave() {
+function onDelete(row: CountryApi.Country) {
+  Modal.confirm({
+    title: '删除国家',
+    content: `确定删除国家「${row.name}（${row.code}）」吗？`,
+    okText: '删除',
+    okType: 'danger',
+    cancelText: '取消',
+    async onOk() {
+      await deleteCountry(row.id);
+      message.success('已删除');
+      await loadList();
+    },
+  });
+}
+
+async function handleSave() {
   if (!form.code) {
     message.warning('请选择国家');
     return;
   }
   if (
-    form.cardBinRatio === null ||
     form.cardBinRatio === undefined ||
-    form.cardBinRatio < 0
+    form.cardBinRatio < 0 ||
+    form.cardBinRatio > 100
   ) {
     message.warning('请输入有效的大卡头占比');
     return;
   }
   saving.value = true;
-  const payload = {
-    code: form.code,
-    name: countryNameByCode(form.code),
-    cardBinRatio: form.cardBinRatio,
-  };
-  if (editingId.value === null) {
-    createCountry(payload);
-    message.success('已新增（静态，未接后端）');
-  } else {
-    updateCountry(editingId.value, payload);
-    message.success('已保存（静态，未接后端）');
+  try {
+    const payload = {
+      code: form.code,
+      cardBinRatio: form.cardBinRatio,
+    };
+    if (editingId.value === null) {
+      await createCountry(payload);
+      message.success('新增成功');
+    } else {
+      await updateCountry(editingId.value, payload);
+      message.success('保存成功');
+    }
+    modalOpen.value = false;
+    await loadList();
+  } finally {
+    saving.value = false;
   }
-  saving.value = false;
-  modalOpen.value = false;
 }
+
+onMounted(() => {
+  void Promise.all([loadList(), loadOptions()]);
+});
 </script>
 
 <template>
-  <Page auto-content-height description="当前为静态预览，数据未接后端">
+  <Page
+    auto-content-height
+    description="从标准国家列表新增，名称和 2 位 CODE 自动带出"
+  >
     <Card class="mb-4" :bordered="false">
       <Form layout="inline" class="gap-y-3">
         <FormItem label="筛选">
@@ -227,24 +252,38 @@ function handleSave() {
         :data-source="list"
         :loading="loading"
         :pagination="{ pageSize: 10, showSizeChanger: true }"
-        :scroll="{ x: 800 }"
+        :scroll="{ x: 1000 }"
         row-key="id"
         size="middle"
       >
         <template #bodyCell="{ column, record }">
           <template v-if="column.key === 'actions'">
-            <Tooltip title="查看">
-              <Button
-                size="small"
-                type="link"
-                @click="onView(record as CountryRow)"
-              >
-                <IconifyIcon class="size-4" icon="lucide:eye" />
-              </Button>
-            </Tooltip>
+            <Space>
+              <Tooltip title="编辑">
+                <Button
+                  size="small"
+                  type="link"
+                  @click="onEdit(record as CountryApi.Country)"
+                >
+                  <IconifyIcon class="size-4" icon="lucide:pencil" />
+                </Button>
+              </Tooltip>
+              <Tooltip title="删除">
+                <Button
+                  danger
+                  size="small"
+                  type="link"
+                  @click="onDelete(record as CountryApi.Country)"
+                >
+                  <IconifyIcon class="size-4" icon="lucide:trash-2" />
+                </Button>
+              </Tooltip>
+            </Space>
           </template>
           <template v-else-if="column.key === 'cardBinRatio'">
-            {{ Number(record.cardBinRatio).toFixed(2) }}
+            <Button type="link" @click="onEdit(record as CountryApi.Country)">
+              {{ Number(record.cardBinRatio).toFixed(2) }}
+            </Button>
           </template>
         </template>
       </Table>
