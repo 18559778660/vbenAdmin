@@ -1,7 +1,7 @@
 <script lang="ts" setup>
-import type { CardBinRow } from '../shared';
+import type { CardTypeApi } from '#/api/basic-config';
 
-import { computed, reactive, ref } from 'vue';
+import { computed, onMounted, reactive, ref } from 'vue';
 
 import { Page } from '@vben/common-ui';
 import { IconifyIcon } from '@vben/icons';
@@ -22,25 +22,23 @@ import {
 } from 'ant-design-vue';
 
 import {
+  createCardType,
+  getCardTypeBrands,
+  getCardTypeList,
+  updateCardType,
+} from '#/api/basic-config';
+
+import {
   CARD_BIN_SEARCH_OPTIONS,
   CARD_LENGTH_OPTIONS,
-  CARD_NAME_OPTIONS,
-  createCardBin,
   emptyBinPrefix,
   formatBinPrefix,
-  mockCardBinList,
   prefixToRegex,
-  updateCardBin,
 } from '../shared';
 
 defineOptions({ name: 'CardBinVerify' });
 
 const searchForm = reactive({
-  field: '',
-  keyword: '',
-});
-
-const applied = reactive({
   field: '',
   keyword: '',
 });
@@ -56,6 +54,8 @@ const loading = ref(false);
 const saving = ref(false);
 const modalOpen = ref(false);
 const editingId = ref<null | number>(null);
+const list = ref<CardTypeApi.CardType[]>([]);
+const brandOptions = ref<CardTypeApi.BrandOption[]>([]);
 
 const modalTitle = computed(() =>
   editingId.value ? '编辑卡类型' : '新增卡类型',
@@ -71,7 +71,7 @@ const columns = [
   },
   { title: '操作', key: 'actions', width: 80, fixed: 'left' as const },
   { title: '缩写', dataIndex: 'code', key: 'code', width: 90 },
-  { title: '名称', dataIndex: 'name', key: 'name', width: 240 },
+  { title: '名称', key: 'name', width: 240 },
   { title: '长度', key: 'lengths', width: 200 },
   { title: '验证规则', key: 'prefixes', width: 360 },
   { title: '添加时间', dataIndex: 'createdAt', key: 'createdAt', width: 180 },
@@ -80,41 +80,42 @@ const columns = [
   { title: '操作人', dataIndex: 'updatedBy', key: 'updatedBy', width: 120 },
 ];
 
-const list = computed(() => {
-  const keyword = applied.keyword.toLowerCase();
-  if (!keyword) {
-    return mockCardBinList.value;
+function buildQuery(): CardTypeApi.ListParams {
+  const params: CardTypeApi.ListParams = {};
+  if (searchForm.field) {
+    params.field = searchForm.field;
   }
-  return mockCardBinList.value.filter((row) => {
-    const matchCode = row.code.toLowerCase().includes(keyword);
-    const matchName = row.name.toLowerCase().includes(keyword);
-    if (applied.field === 'code') {
-      return matchCode;
-    }
-    if (applied.field === 'name') {
-      return matchName;
-    }
-    return matchCode || matchName;
-  });
-});
+  if (searchForm.keyword.trim()) {
+    params.keyword = searchForm.keyword.trim();
+  }
+  return params;
+}
+
+async function loadBrands() {
+  brandOptions.value = await getCardTypeBrands();
+}
+
+async function loadList() {
+  loading.value = true;
+  try {
+    list.value = await getCardTypeList(buildQuery());
+  } finally {
+    loading.value = false;
+  }
+}
 
 function handleSearch() {
-  applied.field = searchForm.field;
-  applied.keyword = searchForm.keyword.trim();
+  void loadList();
 }
 
 function resetSearch() {
   searchForm.field = '';
   searchForm.keyword = '';
-  handleSearch();
+  void loadList();
 }
 
 function handleRefresh() {
-  loading.value = true;
-  window.setTimeout(() => {
-    loading.value = false;
-    message.success('已刷新（静态数据）');
-  }, 300);
+  void loadList();
 }
 
 function resetForm() {
@@ -130,14 +131,17 @@ function openCreate() {
   modalOpen.value = true;
 }
 
-function onEdit(row: CardBinRow) {
+function onEdit(row: CardTypeApi.CardType) {
   editingId.value = row.id;
   form.code = row.code;
   form.name = row.name;
-  form.lengths = [...row.lengths];
+  form.lengths = [...(row.lengths || [])];
   form.prefixes =
-    row.prefixes.length > 0
-      ? row.prefixes.map((item) => ({ ...item }))
+    row.prefixes?.length > 0
+      ? row.prefixes.map((item) => ({
+          start: item.start || '',
+          end: item.end || '',
+        }))
       : [emptyBinPrefix()];
   modalOpen.value = true;
 }
@@ -154,7 +158,7 @@ function removePrefix(index: number) {
   form.prefixes.splice(index, 1);
 }
 
-function handleSave() {
+async function handleSave() {
   const code = form.code.trim().toUpperCase();
   const name = form.name.trim();
   if (!code) {
@@ -199,26 +203,34 @@ function handleSave() {
   }
 
   saving.value = true;
-  const payload = {
-    code,
-    name,
-    lengths: [...form.lengths].toSorted((a, b) => a - b),
-    prefixes,
-  };
-  if (editingId.value === null) {
-    createCardBin(payload);
-    message.success('已新增（静态，未接后端）');
-  } else {
-    updateCardBin(editingId.value, payload);
-    message.success('已保存（静态，未接后端）');
+  try {
+    const payload = {
+      code,
+      name,
+      lengths: [...form.lengths].toSorted((a, b) => a - b),
+      prefixes,
+    };
+    if (editingId.value === null) {
+      await createCardType(payload);
+      message.success('新增成功');
+    } else {
+      await updateCardType(editingId.value, payload);
+      message.success('保存成功');
+    }
+    modalOpen.value = false;
+    await loadList();
+  } finally {
+    saving.value = false;
   }
-  saving.value = false;
-  modalOpen.value = false;
 }
+
+onMounted(() => {
+  void Promise.all([loadList(), loadBrands()]);
+});
 </script>
 
 <template>
-  <Page auto-content-height description="当前为静态预览，数据未接后端">
+  <Page auto-content-height>
     <Card class="mb-4" :bordered="false">
       <Form layout="inline" class="gap-y-3">
         <FormItem label="筛选">
@@ -289,11 +301,14 @@ function handleSave() {
               <Button
                 size="small"
                 type="link"
-                @click="onEdit(record as CardBinRow)"
+                @click="onEdit(record as CardTypeApi.CardType)"
               >
                 <IconifyIcon class="size-4" icon="lucide:pencil" />
               </Button>
             </Tooltip>
+          </template>
+          <template v-else-if="column.key === 'name'">
+            {{ record.nameLabel || record.name }}
           </template>
           <template v-else-if="column.key === 'lengths'">
             <div class="flex flex-wrap gap-1">
@@ -334,7 +349,7 @@ function handleSave() {
         <FormItem label="名称" required>
           <Select
             v-model:value="form.name"
-            :options="CARD_NAME_OPTIONS"
+            :options="brandOptions"
             allow-clear
             option-filter-prop="label"
             placeholder="请选择卡名称"

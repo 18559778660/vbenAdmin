@@ -5,18 +5,6 @@ export type CardBinPrefix = {
   start: string;
 };
 
-export type CardBinRow = {
-  code: string;
-  createdAt: string;
-  createdBy: string;
-  id: number;
-  lengths: number[];
-  name: string;
-  prefixes: CardBinPrefix[];
-  updatedAt: string;
-  updatedBy: string;
-};
-
 export type CurrencyRow = {
   code: string;
   id: number;
@@ -32,26 +20,6 @@ export type CountryRow = {
   id: number;
   name: string;
 };
-
-export const CARD_NAME_OPTIONS = [
-  { label: 'Visa', value: 'Visa' },
-  { label: 'Mastercard', value: 'Mastercard' },
-  { label: 'American Express', value: 'American Express' },
-  { label: 'UnionPay', value: 'UnionPay' },
-  { label: 'JCB', value: 'JCB' },
-  { label: 'Discover', value: 'Discover' },
-  { label: 'Maestro', value: 'Maestro' },
-  { label: 'GPN', value: 'GPN' },
-  { label: 'Diners Club - USA & Canada', value: 'Diners Club - USA & Canada' },
-  {
-    label: 'Diners Club - International',
-    value: 'Diners Club - International',
-  },
-  {
-    label: 'Diners Club - Carte Blanche',
-    value: 'Diners Club - Carte Blanche',
-  },
-];
 
 export const CARD_LENGTH_OPTIONS = [13, 14, 15, 16, 17, 18, 19].map(
   (value) => ({
@@ -384,6 +352,90 @@ export function formatBinPrefix(item: CardBinPrefix) {
     : item.start;
 }
 
+function digitClass(from: string, to: string) {
+  if (from === to) {
+    return from;
+  }
+  if (from === '0' && to === '9') {
+    return String.raw`\d`;
+  }
+  return `[${from}-${to}]`;
+}
+
+function allSame(value: string, digit: string) {
+  return value.length > 0 && [...value].every((item) => item === digit);
+}
+
+function prefixRangePatterns(lo: string, hi: string): string[] {
+  if (lo === hi) {
+    return [lo];
+  }
+  let i = 0;
+  while (i < lo.length && lo[i] === hi[i]) {
+    i += 1;
+  }
+  const prefix = lo.slice(0, i);
+  const startRest = lo.slice(i);
+  const endRest = hi.slice(i);
+  if (allSame(startRest, '0') && allSame(endRest, '9')) {
+    return [`${prefix}${String.raw`\d`.repeat(startRest.length)}`];
+  }
+  return splitPrefixRange(prefix, startRest, endRest);
+}
+
+function splitPrefixRange(
+  prefix: string,
+  startRest: string,
+  endRest: string,
+): string[] {
+  const len = startRest.length;
+  if (len === 1) {
+    return [`${prefix}${digitClass(startRest, endRest)}`];
+  }
+
+  const startDigit = startRest[0] ?? '';
+  const endDigit = endRest[0] ?? '';
+  const startTail = startRest.slice(1);
+  const endTail = endRest.slice(1);
+
+  if (startDigit === endDigit) {
+    return prefixRangePatterns(
+      `${prefix}${startDigit}${startTail}`,
+      `${prefix}${endDigit}${endTail}`,
+    );
+  }
+
+  if (allSame(startTail, '0') && allSame(endTail, '9')) {
+    return [
+      `${prefix}${digitClass(startDigit, endDigit)}${String.raw`\d`.repeat(len - 1)}`,
+    ];
+  }
+
+  const out: string[] = [];
+  out.push(
+    ...prefixRangePatterns(
+      `${prefix}${startRest}`,
+      `${prefix}${startDigit}${'9'.repeat(len - 1)}`,
+    ),
+  );
+
+  const midFrom = Number(startDigit) + 1;
+  const midTo = Number(endDigit) - 1;
+  if (midFrom <= midTo) {
+    out.push(
+      `${prefix}${digitClass(String(midFrom), String(midTo))}${String.raw`\d`.repeat(len - 1)}`,
+    );
+  }
+
+  out.push(
+    ...prefixRangePatterns(
+      `${prefix}${endDigit}${'0'.repeat(len - 1)}`,
+      `${prefix}${endRest}`,
+    ),
+  );
+  return out;
+}
+
 export function prefixToRegex(item: CardBinPrefix) {
   const start = item.start;
   const end = item.end && item.end !== item.start ? item.end : '';
@@ -395,38 +447,16 @@ export function prefixToRegex(item: CardBinPrefix) {
   }
   if (
     start.length !== end.length ||
+    start > end ||
     !/^\d+$/.test(start) ||
     !/^\d+$/.test(end)
   ) {
     return `/^(${start}|${end})/`;
   }
 
-  let i = 0;
-  while (i < start.length && start[i] === end[i]) {
-    i += 1;
-  }
-  const common = start.slice(0, i);
-  const startRest = start.slice(i);
-  const endRest = end.slice(i);
-
-  if (startRest.length === 1 && endRest.length === 1) {
-    return `/^${common}[${startRest}-${endRest}]/`;
-  }
-  if (
-    startRest.length === 2 &&
-    endRest.length === 2 &&
-    startRest[1] === '0' &&
-    endRest[1] === '9'
-  ) {
-    return `/^${common}[${startRest[0]}-${endRest[0]}][0-9]/`;
-  }
-  if (startRest.length > 1 && startRest.slice(0, -1) === endRest.slice(0, -1)) {
-    return `/^${common}${startRest.slice(0, -1)}[${startRest.at(-1)}-${endRest.at(-1)}]/`;
-  }
-
-  const parts: string[] = [];
-  for (let n = Number(start); n <= Number(end); n += 1) {
-    parts.push(String(n).padStart(start.length, '0'));
+  const parts = prefixRangePatterns(start, end);
+  if (parts.length === 1) {
+    return `/^${parts[0]}/`;
   }
   return `/^(${parts.join('|')})/`;
 }
@@ -436,97 +466,6 @@ export function nowText() {
   const pad = (n: number) => String(n).padStart(2, '0');
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
 }
-
-export const mockCardBinList = ref<CardBinRow[]>([
-  {
-    id: 13,
-    code: 'UP',
-    name: 'UnionPay',
-    lengths: [16, 17, 18, 19],
-    prefixes: [{ start: '62', end: '' }],
-    createdAt: '2021-07-16 14:42:19',
-    createdBy: 'liuadmin',
-    updatedAt: '2021-07-16 14:42:19',
-    updatedBy: 'liuadmin',
-  },
-  {
-    id: 12,
-    code: 'GPN',
-    name: 'GPN',
-    lengths: [16, 18, 19],
-    prefixes: [
-      { start: '50', end: '' },
-      { start: '56', end: '' },
-      { start: '58', end: '' },
-      { start: '60', end: '63' },
-    ],
-    createdAt: '2021-07-16 14:42:19',
-    createdBy: 'liuadmin',
-    updatedAt: '2021-07-16 14:42:19',
-    updatedBy: 'liuadmin',
-  },
-  {
-    id: 11,
-    code: 'DC3',
-    name: 'Diners Club - USA & Canada',
-    lengths: [16],
-    prefixes: [{ start: '54', end: '' }],
-    createdAt: '2021-07-16 14:42:19',
-    createdBy: 'liuadmin',
-    updatedAt: '2021-07-16 14:42:19',
-    updatedBy: 'liuadmin',
-  },
-  {
-    id: 10,
-    code: 'DC2',
-    name: 'Diners Club - International',
-    lengths: [14],
-    prefixes: [{ start: '36', end: '' }],
-    createdAt: '2021-07-16 14:42:19',
-    createdBy: 'liuadmin',
-    updatedAt: '2021-07-16 14:42:19',
-    updatedBy: 'liuadmin',
-  },
-  {
-    id: 9,
-    code: 'DC1',
-    name: 'Diners Club - Carte Blanche',
-    lengths: [14],
-    prefixes: [{ start: '300', end: '305' }],
-    createdAt: '2021-07-16 14:42:19',
-    createdBy: 'liuadmin',
-    updatedAt: '2021-07-16 14:42:19',
-    updatedBy: 'liuadmin',
-  },
-  {
-    id: 8,
-    code: 'AE',
-    name: 'American Express',
-    lengths: [15],
-    prefixes: [
-      { start: '34', end: '' },
-      { start: '37', end: '' },
-    ],
-    createdAt: '2021-07-16 14:42:19',
-    createdBy: 'liuadmin',
-    updatedAt: '2021-07-16 14:42:19',
-    updatedBy: 'liuadmin',
-  },
-  {
-    id: 7,
-    code: 'JCB',
-    name: 'JCB',
-    lengths: [16, 17, 18, 19],
-    prefixes: [
-      { start: '3528', end: '3529' },
-      { start: '3530', end: '3589' },
-    ],
-    createdAt: '2021-07-16 14:42:19',
-    createdBy: 'liuadmin',
-    updatedAt: '2021-07-16 14:42:19',
-    updatedBy: 'liuadmin',
-  },
-]);
 
 export const mockCurrencyList = ref<CurrencyRow[]>([
   {
@@ -612,40 +551,8 @@ export const mockCountryList = ref<CountryRow[]>(
   })).toReversed(),
 );
 
-let nextCardBinId = 14;
 let nextCurrencyId = 28;
 let nextCountryId = COUNTRY_OPTIONS.length + 1;
-
-export function createCardBin(
-  payload: Omit<
-    CardBinRow,
-    'createdAt' | 'createdBy' | 'id' | 'updatedAt' | 'updatedBy'
-  >,
-) {
-  const time = nowText();
-  const row: CardBinRow = {
-    ...payload,
-    id: nextCardBinId++,
-    createdAt: time,
-    createdBy: 'admin',
-    updatedAt: time,
-    updatedBy: 'admin',
-  };
-  mockCardBinList.value.unshift(row);
-  return row;
-}
-
-export function updateCardBin(id: number, payload: Partial<CardBinRow>) {
-  const row = mockCardBinList.value.find((item) => item.id === id);
-  if (!row) {
-    return null;
-  }
-  Object.assign(row, payload, {
-    updatedAt: nowText(),
-    updatedBy: 'admin',
-  });
-  return row;
-}
 
 export function createCurrency(
   payload: Omit<CurrencyRow, 'id' | 'updatedAt' | 'updatedBy'>,
