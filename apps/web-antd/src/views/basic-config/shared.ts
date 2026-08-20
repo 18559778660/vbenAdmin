@@ -5,15 +5,6 @@ export type CardBinPrefix = {
   start: string;
 };
 
-export type CurrencyRow = {
-  code: string;
-  id: number;
-  name: string;
-  rate: number;
-  updatedAt: string;
-  updatedBy: string;
-};
-
 export type CountryRow = {
   cardBinRatio: number;
   code: string;
@@ -39,48 +30,6 @@ export const CURRENCY_SEARCH_OPTIONS = [
   { label: '名称', value: 'name' },
   { label: 'CODE', value: 'code' },
 ];
-
-export const CURRENCY_OPTIONS = [
-  { label: '美元', value: 'USD' },
-  { label: '欧元', value: 'EUR' },
-  { label: '人民币', value: 'CNY' },
-  { label: '英镑', value: 'GBP' },
-  { label: '日元', value: 'JPY' },
-  { label: '港币', value: 'HKD' },
-  { label: '新台币', value: 'TWD' },
-  { label: '澳元', value: 'AUD' },
-  { label: '加元', value: 'CAD' },
-  { label: '新加坡元', value: 'SGD' },
-  { label: '韩元', value: 'KRW' },
-  { label: '瑞士法郎', value: 'CHF' },
-  { label: '土耳其里拉', value: 'TRY' },
-  { label: '保加利亚列弗', value: 'BGN' },
-  { label: '乌克兰格里夫纳', value: 'UAH' },
-  { label: '匈牙利福林', value: 'HUF' },
-  { label: '塞尔维亚第纳尔', value: 'RSD' },
-  { label: '马来西亚林吉特', value: 'MYR' },
-  { label: '泰铢', value: 'THB' },
-  { label: '印度卢比', value: 'INR' },
-  { label: '俄罗斯卢布', value: 'RUB' },
-  { label: '波兰兹罗提', value: 'PLN' },
-  { label: '墨西哥比索', value: 'MXN' },
-  { label: '巴西雷亚尔', value: 'BRL' },
-  { label: '阿联酋迪拉姆', value: 'AED' },
-  { label: '菲律宾比索', value: 'PHP' },
-  { label: '印尼盾', value: 'IDR' },
-  { label: '越南盾', value: 'VND' },
-];
-
-export function currencyNameByCode(code: string) {
-  return CURRENCY_OPTIONS.find((item) => item.value === code)?.label || code;
-}
-
-export function currencySelectOptions() {
-  return CURRENCY_OPTIONS.map((item) => ({
-    label: `${item.label}（${item.value}）`,
-    value: item.value,
-  }));
-}
 
 export const COUNTRY_SEARCH_OPTIONS = [
   { label: '不限', value: '' },
@@ -461,87 +410,6 @@ export function prefixToRegex(item: CardBinPrefix) {
   return `/^(${parts.join('|')})/`;
 }
 
-export function nowText() {
-  const d = new Date();
-  const pad = (n: number) => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
-}
-
-export const mockCurrencyList = ref<CurrencyRow[]>([
-  {
-    id: 27,
-    name: '土耳其里拉',
-    code: 'TRY',
-    rate: 47.5712,
-    updatedAt: '2026-08-05 16:00:03',
-    updatedBy: 'root',
-  },
-  {
-    id: 26,
-    name: '保加利亚列弗',
-    code: 'BGN',
-    rate: 1.665,
-    updatedAt: '2026-08-05 16:00:03',
-    updatedBy: 'root',
-  },
-  {
-    id: 25,
-    name: '乌克兰格里夫纳',
-    code: 'UAH',
-    rate: 44.6998,
-    updatedAt: '2026-08-05 16:00:03',
-    updatedBy: 'root',
-  },
-  {
-    id: 24,
-    name: '匈牙利福林',
-    code: 'HUF',
-    rate: 313.36,
-    updatedAt: '2026-08-05 16:00:03',
-    updatedBy: 'root',
-  },
-  {
-    id: 23,
-    name: '塞尔维亚第纳尔',
-    code: 'RSD',
-    rate: 101.65,
-    updatedAt: '2026-08-05 16:00:03',
-    updatedBy: 'root',
-  },
-  {
-    id: 19,
-    name: '港币',
-    code: 'HKD',
-    rate: 7.8434,
-    updatedAt: '2026-08-05 16:00:03',
-    updatedBy: 'root',
-  },
-  {
-    id: 3,
-    name: '人民币',
-    code: 'CNY',
-    rate: 7.12,
-    updatedAt: '2026-08-01 10:00:00',
-    updatedBy: 'admin',
-  },
-  {
-    id: 2,
-    name: '欧元',
-    code: 'EUR',
-    rate: 0.92,
-    updatedAt: '2026-08-01 10:00:00',
-    updatedBy: 'admin',
-  },
-  {
-    id: 1,
-    name: '美元',
-    code: 'USD',
-    rate: 1,
-    updatedAt: '2026-08-01 10:00:00',
-    updatedBy: 'admin',
-  },
-]);
-
 export const mockCountryList = ref<CountryRow[]>(
   COUNTRY_OPTIONS.map((item, index) => ({
     id: index + 1,
@@ -551,33 +419,7 @@ export const mockCountryList = ref<CountryRow[]>(
   })).toReversed(),
 );
 
-let nextCurrencyId = 28;
 let nextCountryId = COUNTRY_OPTIONS.length + 1;
-
-export function createCurrency(
-  payload: Omit<CurrencyRow, 'id' | 'updatedAt' | 'updatedBy'>,
-) {
-  const row: CurrencyRow = {
-    ...payload,
-    id: nextCurrencyId++,
-    updatedAt: nowText(),
-    updatedBy: 'admin',
-  };
-  mockCurrencyList.value.unshift(row);
-  return row;
-}
-
-export function updateCurrency(id: number, payload: Partial<CurrencyRow>) {
-  const row = mockCurrencyList.value.find((item) => item.id === id);
-  if (!row) {
-    return null;
-  }
-  Object.assign(row, payload, {
-    updatedAt: nowText(),
-    updatedBy: 'admin',
-  });
-  return row;
-}
 
 export function createCountry(payload: Omit<CountryRow, 'id'>) {
   const row: CountryRow = {

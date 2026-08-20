@@ -37,6 +37,34 @@ export namespace CardTypeApi {
   }
 }
 
+export namespace CurrencyApi {
+  export interface Currency {
+    id: number;
+    code: string;
+    name: string;
+    rate: number;
+    createdBy: string;
+    createdAt: string;
+    updatedBy: string;
+    updatedAt: string;
+  }
+
+  export interface Option {
+    value: string;
+    label: string;
+  }
+
+  export interface ListParams {
+    field?: string;
+    keyword?: string;
+  }
+
+  export interface SavePayload {
+    code: string;
+    rate: number;
+  }
+}
+
 export async function getCardTypeList(params?: CardTypeApi.ListParams) {
   return requestClient.get<CardTypeApi.CardType[]>('/card-types', { params });
 }
@@ -54,4 +82,27 @@ export async function updateCardType(
   data: CardTypeApi.SavePayload,
 ) {
   return requestClient.put<CardTypeApi.CardType>(`/card-types/${id}`, data);
+}
+
+export async function getCurrencyList(params?: CurrencyApi.ListParams) {
+  return requestClient.get<CurrencyApi.Currency[]>('/currencies', { params });
+}
+
+export async function getCurrencyOptions() {
+  return requestClient.get<CurrencyApi.Option[]>('/currencies/options');
+}
+
+export async function createCurrency(data: CurrencyApi.SavePayload) {
+  return requestClient.post<CurrencyApi.Currency>('/currencies', data);
+}
+
+export async function updateCurrency(
+  id: number,
+  data: CurrencyApi.SavePayload,
+) {
+  return requestClient.put<CurrencyApi.Currency>(`/currencies/${id}`, data);
+}
+
+export async function deleteCurrency(id: number) {
+  return requestClient.delete(`/currencies/${id}`);
 }

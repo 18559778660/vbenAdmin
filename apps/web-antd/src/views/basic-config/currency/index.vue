@@ -1,7 +1,7 @@
 <script lang="ts" setup>
-import type { CurrencyRow } from '../shared';
+import type { CurrencyApi } from '#/api/basic-config';
 
-import { computed, reactive, ref } from 'vue';
+import { computed, onMounted, reactive, ref } from 'vue';
 
 import { Page } from '@vben/common-ui';
 import { IconifyIcon } from '@vben/icons';
@@ -23,12 +23,13 @@ import {
 
 import {
   createCurrency,
-  CURRENCY_SEARCH_OPTIONS,
-  currencyNameByCode,
-  currencySelectOptions,
-  mockCurrencyList,
+  deleteCurrency,
+  getCurrencyList,
+  getCurrencyOptions,
   updateCurrency,
-} from '../shared';
+} from '#/api/basic-config';
+
+import { CURRENCY_SEARCH_OPTIONS } from '../shared';
 
 defineOptions({ name: 'CurrencyList' });
 
@@ -37,30 +38,26 @@ const searchForm = reactive({
   keyword: '',
 });
 
-const applied = reactive({
-  field: '',
-  keyword: '',
-});
-
 const form = reactive({
   code: '',
-  rate: 1,
+  rate: 1 as number | undefined,
 });
 
 const loading = ref(false);
 const saving = ref(false);
 const modalOpen = ref(false);
 const editingId = ref<null | number>(null);
+const list = ref<CurrencyApi.Currency[]>([]);
+const catalogOptions = ref<CurrencyApi.Option[]>([]);
 
 const modalTitle = computed(() => (editingId.value ? '编辑货币' : '新增货币'));
-const allCurrencyOptions = currencySelectOptions();
 
 const currencyOptions = computed(() => {
-  const used = new Set(mockCurrencyList.value.map((item) => item.code));
+  const used = new Set(list.value.map((item) => item.code));
   const current = editingId.value
-    ? mockCurrencyList.value.find((item) => item.id === editingId.value)?.code
+    ? list.value.find((item) => item.id === editingId.value)?.code
     : '';
-  return allCurrencyOptions.filter(
+  return catalogOptions.value.filter(
     (item) => !used.has(item.value) || item.value === current,
   );
 });
@@ -73,7 +70,7 @@ const columns = [
     width: 80,
     fixed: 'left' as const,
   },
-  { title: '操作', key: 'actions', width: 80, fixed: 'left' as const },
+  { title: '操作', key: 'actions', width: 108, fixed: 'left' as const },
   { title: '名称', dataIndex: 'name', key: 'name', width: 180 },
   { title: 'CODE', dataIndex: 'code', key: 'code', width: 100 },
   { title: '汇率', key: 'rate', width: 140 },
@@ -81,41 +78,42 @@ const columns = [
   { title: '操作人', dataIndex: 'updatedBy', key: 'updatedBy', width: 120 },
 ];
 
-const list = computed(() => {
-  const keyword = applied.keyword.toLowerCase();
-  if (!keyword) {
-    return mockCurrencyList.value;
+function buildQuery(): CurrencyApi.ListParams {
+  const params: CurrencyApi.ListParams = {};
+  if (searchForm.field) {
+    params.field = searchForm.field;
   }
-  return mockCurrencyList.value.filter((row) => {
-    const matchCode = row.code.toLowerCase().includes(keyword);
-    const matchName = row.name.toLowerCase().includes(keyword);
-    if (applied.field === 'code') {
-      return matchCode;
-    }
-    if (applied.field === 'name') {
-      return matchName;
-    }
-    return matchCode || matchName;
-  });
-});
+  if (searchForm.keyword.trim()) {
+    params.keyword = searchForm.keyword.trim();
+  }
+  return params;
+}
+
+async function loadOptions() {
+  catalogOptions.value = await getCurrencyOptions();
+}
+
+async function loadList() {
+  loading.value = true;
+  try {
+    list.value = await getCurrencyList(buildQuery());
+  } finally {
+    loading.value = false;
+  }
+}
 
 function handleSearch() {
-  applied.field = searchForm.field;
-  applied.keyword = searchForm.keyword.trim();
+  void loadList();
 }
 
 function resetSearch() {
   searchForm.field = '';
   searchForm.keyword = '';
-  handleSearch();
+  void loadList();
 }
 
 function handleRefresh() {
-  loading.value = true;
-  window.setTimeout(() => {
-    loading.value = false;
-    message.success('已刷新（静态数据）');
-  }, 300);
+  void loadList();
 }
 
 function resetForm() {
@@ -129,42 +127,67 @@ function openCreate() {
   modalOpen.value = true;
 }
 
-function onEdit(row: CurrencyRow) {
+function onEdit(row: CurrencyApi.Currency) {
   editingId.value = row.id;
   form.code = row.code;
   form.rate = row.rate;
   modalOpen.value = true;
 }
 
-function handleSave() {
+function onDelete(row: CurrencyApi.Currency) {
+  Modal.confirm({
+    title: '删除货币',
+    content: `确定删除货币「${row.name}（${row.code}）」吗？`,
+    okText: '删除',
+    okType: 'danger',
+    cancelText: '取消',
+    async onOk() {
+      await deleteCurrency(row.id);
+      message.success('已删除');
+      await loadList();
+    },
+  });
+}
+
+async function handleSave() {
   if (!form.code) {
     message.warning('请选择货币');
     return;
   }
-  if (form.rate === null || form.rate === undefined || form.rate < 0) {
+  if (form.rate === undefined || form.rate < 0) {
     message.warning('请输入有效汇率');
     return;
   }
   saving.value = true;
-  const payload = {
-    code: form.code,
-    name: currencyNameByCode(form.code),
-    rate: form.rate,
-  };
-  if (editingId.value === null) {
-    createCurrency(payload);
-    message.success('已新增（静态，未接后端）');
-  } else {
-    updateCurrency(editingId.value, payload);
-    message.success('已保存（静态，未接后端）');
+  try {
+    const payload = {
+      code: form.code,
+      rate: form.rate,
+    };
+    if (editingId.value === null) {
+      await createCurrency(payload);
+      message.success('新增成功');
+    } else {
+      await updateCurrency(editingId.value, payload);
+      message.success('保存成功');
+    }
+    modalOpen.value = false;
+    await loadList();
+  } finally {
+    saving.value = false;
   }
-  saving.value = false;
-  modalOpen.value = false;
 }
+
+onMounted(() => {
+  void Promise.all([loadList(), loadOptions()]);
+});
 </script>
 
 <template>
-  <Page auto-content-height description="当前为静态预览，数据未接后端">
+  <Page
+    auto-content-height
+    description="从标准货币列表新增，名称和 CODE 自动带出"
+  >
     <Card class="mb-4" :bordered="false">
       <Form layout="inline" class="gap-y-3">
         <FormItem label="筛选">
@@ -231,18 +254,30 @@ function handleSave() {
       >
         <template #bodyCell="{ column, record }">
           <template v-if="column.key === 'actions'">
-            <Tooltip title="编辑">
-              <Button
-                size="small"
-                type="link"
-                @click="onEdit(record as CurrencyRow)"
-              >
-                <IconifyIcon class="size-4" icon="lucide:pencil" />
-              </Button>
-            </Tooltip>
+            <Space>
+              <Tooltip title="编辑">
+                <Button
+                  size="small"
+                  type="link"
+                  @click="onEdit(record as CurrencyApi.Currency)"
+                >
+                  <IconifyIcon class="size-4" icon="lucide:pencil" />
+                </Button>
+              </Tooltip>
+              <Tooltip title="删除">
+                <Button
+                  danger
+                  size="small"
+                  type="link"
+                  @click="onDelete(record as CurrencyApi.Currency)"
+                >
+                  <IconifyIcon class="size-4" icon="lucide:trash-2" />
+                </Button>
+              </Tooltip>
+            </Space>
           </template>
           <template v-else-if="column.key === 'rate'">
-            <Button type="link" @click="onEdit(record as CurrencyRow)">
+            <Button type="link" @click="onEdit(record as CurrencyApi.Currency)">
               {{ record.rate }}
             </Button>
           </template>
