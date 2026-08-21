@@ -1,7 +1,7 @@
 <script lang="ts" setup>
 import type { ChannelRow } from '../shared';
 
-import { computed, reactive, ref } from 'vue';
+import { computed, onMounted, reactive, ref } from 'vue';
 
 import { Page } from '@vben/common-ui';
 import { IconifyIcon } from '@vben/icons';
@@ -26,14 +26,16 @@ import {
 } from 'ant-design-vue';
 
 import {
+  getCardTypeList,
+  getCountryOptions,
+  getCurrencyOptions,
+} from '#/api/basic-config';
+
+import {
   AMOUNT_LIMIT_MODE_LABELS,
   CARD_BRAND_LABELS,
-  CARD_TYPE_LABELS,
   COLLECT_RULE_LABELS,
-  COUNTRY_OPTIONS,
-  countryLabel,
   createChannel,
-  CURRENCY_OPTIONS,
   getChannelById,
   INTERCEPT_MODE_LABELS,
   MIXER_OPTIONS,
@@ -167,6 +169,36 @@ const columns = [
   { title: '创建', key: 'created', width: 170 },
 ];
 
+const currencyOptions = ref<{ label: string; value: string }[]>([]);
+const countryOptions = ref<{ label: string; value: string }[]>([]);
+const cardTypeOptions = ref<{ label: string; value: string }[]>([]);
+
+async function loadConfigOptions() {
+  try {
+    const [currencies, countries, cardTypes] = await Promise.all([
+      getCurrencyOptions(),
+      getCountryOptions(),
+      getCardTypeList(),
+    ]);
+    currencyOptions.value = currencies;
+    countryOptions.value = countries;
+    cardTypeOptions.value = cardTypes.map((item) => ({
+      value: item.code,
+      label: `${item.nameLabel || item.name}（${item.code}）`,
+    }));
+  } catch {
+    currencyOptions.value = [];
+    countryOptions.value = [];
+    cardTypeOptions.value = [];
+  }
+}
+
+function countryLabel(code: string) {
+  return (
+    countryOptions.value.find((item) => item.value === code)?.label || code
+  );
+}
+
 const list = computed(() => {
   return mockChannelList.value.filter((row) => {
     if (applied.id !== undefined && row.id !== applied.id) {
@@ -234,7 +266,8 @@ function onEdit(row: ChannelRow) {
   infoForm.remark = row.remark;
   infoForm.returnIpWhitelist = row.returnIpWhitelist;
   infoForm.disableBrandWords = row.disableBrandWords;
-  infoForm.collectRule = row.collectRule;
+  infoForm.collectRule =
+    row.collectRule === 'weight' ? 'random' : row.collectRule;
   infoForm.shipRange = row.shipRange;
   infoForm.orderNoMode = row.orderNoMode;
   infoForm.sort = row.sort;
@@ -248,6 +281,7 @@ function onEdit(row: ChannelRow) {
 
 function onLimit(row: ChannelRow) {
   editingId.value = row.id;
+  void loadConfigOptions();
   editForm.channelCode = row.channelCode;
   editForm.dailyAmountLimit = row.dailyAmountLimit;
   editForm.payFrequency = row.payFrequency;
@@ -427,6 +461,10 @@ function onToggleStatus(row: ChannelRow, checked: boolean | number | string) {
   row.updatedBy = 'admin';
   row.updatedAt = nowText();
 }
+
+onMounted(() => {
+  void loadConfigOptions();
+});
 </script>
 
 <template>
@@ -797,8 +835,9 @@ function onToggleStatus(row: ChannelRow, checked: boolean | number | string) {
                 v-model:value="infoForm.mixers"
                 :options="MIXER_OPTIONS"
                 allow-clear
+                disabled
                 mode="multiple"
-                placeholder="请选择一项或多项"
+                placeholder="暂未开放"
               />
             </FormItem>
             <FormItem label="结算比例">
@@ -979,10 +1018,12 @@ function onToggleStatus(row: ChannelRow, checked: boolean | number | string) {
             <FormItem label="支付货币">
               <Select
                 v-model:value="editForm.currencies"
-                :options="CURRENCY_OPTIONS"
+                :options="currencyOptions"
                 allow-clear
                 mode="multiple"
+                option-filter-prop="label"
                 placeholder="请选择支付货币"
+                show-search
               />
               <div class="text-muted-foreground mt-1 text-xs">
                 某支付方式仅支持这些货币；不选表示不限制
@@ -991,7 +1032,7 @@ function onToggleStatus(row: ChannelRow, checked: boolean | number | string) {
             <FormItem label="仅支持国家">
               <Select
                 v-model:value="editForm.allowCountries"
-                :options="COUNTRY_OPTIONS"
+                :options="countryOptions"
                 allow-clear
                 mode="multiple"
                 option-filter-prop="label"
@@ -1002,10 +1043,12 @@ function onToggleStatus(row: ChannelRow, checked: boolean | number | string) {
             <FormItem label="仅支持卡类型">
               <Select
                 v-model:value="editForm.allowCardTypes"
-                :options="toOptions(CARD_TYPE_LABELS)"
+                :options="cardTypeOptions"
                 allow-clear
                 mode="multiple"
+                option-filter-prop="label"
                 placeholder="请选择一项或多项"
+                show-search
               />
             </FormItem>
             <FormItem label="禁用卡头">
@@ -1013,8 +1056,9 @@ function onToggleStatus(row: ChannelRow, checked: boolean | number | string) {
                 v-model:value="editForm.disableCardBrands"
                 :options="toOptions(CARD_BRAND_LABELS)"
                 allow-clear
+                disabled
                 mode="multiple"
-                placeholder="请选择卡组织，如 Visa、万事达"
+                placeholder="暂未开放"
               />
             </FormItem>
           </div>
@@ -1057,8 +1101,10 @@ function onToggleStatus(row: ChannelRow, checked: boolean | number | string) {
             <FormItem label="计算货币">
               <Select
                 v-model:value="editForm.calcCurrency"
-                :options="CURRENCY_OPTIONS"
+                :options="currencyOptions"
+                option-filter-prop="label"
                 placeholder="请选择计算货币"
+                show-search
               />
               <div class="text-muted-foreground mt-1 text-xs">
                 限制金额时使用
@@ -1075,7 +1121,7 @@ function onToggleStatus(row: ChannelRow, checked: boolean | number | string) {
             <FormItem label="优先国家">
               <Select
                 v-model:value="editForm.preferCountries"
-                :options="COUNTRY_OPTIONS"
+                :options="countryOptions"
                 allow-clear
                 mode="multiple"
                 option-filter-prop="label"
@@ -1089,7 +1135,7 @@ function onToggleStatus(row: ChannelRow, checked: boolean | number | string) {
             <FormItem label="禁用国家">
               <Select
                 v-model:value="editForm.disableCountries"
-                :options="COUNTRY_OPTIONS"
+                :options="countryOptions"
                 allow-clear
                 mode="multiple"
                 option-filter-prop="label"
@@ -1100,10 +1146,12 @@ function onToggleStatus(row: ChannelRow, checked: boolean | number | string) {
             <FormItem label="禁用卡类型">
               <Select
                 v-model:value="editForm.disableCardTypes"
-                :options="toOptions(CARD_TYPE_LABELS)"
+                :options="cardTypeOptions"
                 allow-clear
                 mode="multiple"
+                option-filter-prop="label"
                 placeholder="请选择一项或多项"
+                show-search
               />
             </FormItem>
           </div>

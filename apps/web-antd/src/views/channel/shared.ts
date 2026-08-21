@@ -100,12 +100,6 @@ export const AMOUNT_LIMIT_MODE_LABELS: Record<string, string> = {
   intercept: '拦截',
 };
 
-export const CARD_TYPE_LABELS: Record<string, string> = {
-  credit: '信用卡',
-  debit: '借记卡',
-  prepaid: '预付卡',
-};
-
 export const CARD_BRAND_LABELS: Record<string, string> = {
   visa: 'Visa',
   mastercard: '万事达',
@@ -117,26 +111,12 @@ export const CARD_BRAND_LABELS: Record<string, string> = {
 export const COLLECT_RULE_LABELS: Record<string, string> = {
   random: '随机',
   round: '轮询',
-  weight: '权重',
 };
 
 export const MIXER_OPTIONS = [
   { label: '账号池A', value: 'pool-a' },
   { label: '账号池B', value: 'pool-b' },
   { label: '账号池C', value: 'pool-c' },
-];
-
-export const COUNTRY_OPTIONS = [
-  { label: '美国', value: 'US' },
-  { label: '中国', value: 'CN' },
-  { label: '英国', value: 'GB' },
-  { label: '日本', value: 'JP' },
-];
-
-export const CURRENCY_OPTIONS = [
-  { label: 'USD', value: 'USD' },
-  { label: 'EUR', value: 'EUR' },
-  { label: 'CNY', value: 'CNY' },
 ];
 
 export const platformFilterOptions = [
@@ -153,10 +133,6 @@ export function toOptions(map: Record<string, string>) {
 
 export function money(value: number) {
   return value.toFixed(2);
-}
-
-export function countryLabel(code: string) {
-  return COUNTRY_OPTIONS.find((item) => item.value === code)?.label || code;
 }
 
 export function nowText() {
