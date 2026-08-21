@@ -81,12 +81,13 @@ export const SUCCESS_MODE_LABELS: Record<string, string> = {
 
 export const ORDER_NO_MODE_LABELS: Record<string, string> = {
   site: '网站订单号',
-  system: '系统订单号',
+  strip_suffix: '去后缀订单号',
 };
 
 export const PRODUCT_INFO_LABELS: Record<string, string> = {
-  site: '网站信息',
   kezhan: '壳站信息',
+  product: '产品数据',
+  rebuild: '重组数据',
 };
 
 export const RETURN_VERIFY_LABELS: Record<string, string> = {
@@ -192,7 +193,7 @@ function baseRow(
     channelCode: '',
     payCode: '',
     orderNoMode: 'site',
-    productInfo: 'site',
+    productInfo: 'kezhan',
     returnVerify: 'verify',
     oldCustomerDays: 30,
     payParams: '',

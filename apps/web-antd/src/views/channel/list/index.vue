@@ -78,7 +78,7 @@ const form = reactive({
   orderNoMode: 'site',
   settleRate: 0,
   payParams: '',
-  productInfo: 'site',
+  productInfo: 'kezhan',
   channelCode: '',
   payCode: '',
   returnVerify: 'verify',
@@ -99,7 +99,7 @@ const infoForm = reactive({
   shipRange: '40-50',
   orderNoMode: 'site',
   sort: 1,
-  productInfo: 'site',
+  productInfo: 'kezhan',
   returnVerify: 'verify',
   oldCustomerDays: 30,
   autoShip: true,
@@ -210,7 +210,7 @@ function resetForm() {
   form.orderNoMode = 'site';
   form.settleRate = 0;
   form.payParams = '';
-  form.productInfo = 'site';
+  form.productInfo = 'kezhan';
   form.channelCode = '';
   form.payCode = '';
   form.returnVerify = 'verify';
