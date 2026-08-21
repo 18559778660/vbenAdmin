@@ -107,7 +107,7 @@ const routes: RouteRecordRaw[] = [
       {
         name: 'ChannelGroup',
         path: 'group',
-        component: Placeholder,
+        component: () => import('#/views/channel/group/index.vue'),
         meta: {
           icon: 'lucide:layers',
           title: $t('page.channel.group'),
