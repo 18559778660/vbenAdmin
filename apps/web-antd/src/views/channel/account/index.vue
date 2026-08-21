@@ -23,12 +23,23 @@ import {
   Switch,
   Table,
   Tag,
+  Tooltip,
 } from 'ant-design-vue';
 
-import { getCountryOptions, getCurrencyOptions } from '#/api/basic-config';
-
-import { INTERCEPT_MODE_LABELS, SUCCESS_MODE_LABELS } from '../shared';
 import {
+  getCardTypeList,
+  getCountryOptions,
+  getCurrencyOptions,
+} from '#/api/basic-config';
+
+import {
+  CARD_BRAND_LABELS,
+  INTERCEPT_MODE_LABELS,
+  SUCCESS_MODE_LABELS,
+  toOptions,
+} from '../shared';
+import {
+  ACCOUNT_LIMIT_MODE_LABELS,
   CHANNEL_OPTIONS,
   GROUP_OPTIONS,
   groupLabel,
@@ -36,13 +47,26 @@ import {
   money,
   nextAccountIdValue,
   nowText,
+  parseResetTime,
   PAYMENT_METHOD_LABELS,
+  RESET_HOUR_OPTIONS,
+  RESET_TIME_OPTIONS,
+  SITE_B_OPTIONS,
+  STATUS_OPTIONS,
   USER_OPTIONS,
 } from './shared';
 
 defineOptions({ name: 'ChannelAccount' });
 
+type ViewMode = 'create-step1' | 'create-step2' | 'list';
+
 const { RangePicker } = DatePicker;
+
+const viewMode = ref<ViewMode>('list');
+const saving = ref(false);
+const editOpen = ref(false);
+const limitOpen = ref(false);
+const editingId = ref<null | number>(null);
 
 const searchForm = reactive({
   id: undefined as number | undefined,
@@ -68,31 +92,70 @@ const applied = reactive({
 });
 
 const loading = ref(false);
-const modalOpen = ref(false);
-const saving = ref(false);
-const editingId = ref<null | number>(null);
 
-const form = reactive({
-  channel: 'PRO_card',
+const step1Form = reactive({
+  channel: undefined as string | undefined,
+});
+
+const step2Form = reactive({
   accountNo: '',
   alias: '',
-  remark: '',
-  paymentMethod: 'card',
-  groupName: 'default',
-  assignedUser: 'none',
-  dailyOrderLimit: 0,
+  status: 1,
+  resetTime: undefined as string | undefined,
   dailyAmountLimit: 0,
-  interceptMode: 'reset',
-  interceptCurrency: 'USD',
-  interceptMax: 0,
-  interceptMin: 0,
-  successMode: 'unlimited',
+  tradeCurrency: undefined as string | undefined,
+  sort: 0,
+  publicKey: '',
+  webSecret: '',
+  siteB: undefined as string | undefined,
+  dailyOrderLimit: 0,
   disableCountries: [] as string[],
   preferCountries: [] as string[],
+  remark: '',
+  privateKey: '',
+});
+
+const editForm = reactive({
+  accountNo: '',
+  alias: '',
+  status: 1,
+  sort: 0,
+  appId: '',
+  merchantId: '',
+  webSecret: '',
+  siteB: undefined as string | undefined,
+  remark: '',
+  privateKey: '',
+  environment: 'live',
+});
+
+const limitForm = reactive({
+  resetHour: 0,
+  dailyAmountLimit: 0,
+  currencies: [] as string[],
+  successCountLimit: 0,
+  allowCountries: [] as string[],
+  amountLimitMode: 'reset',
+  interceptMax: 0,
+  allowCardTypes: [] as string[],
+  disableCardBrands: [] as string[],
+  dailyOrderLimit: 0,
+  maxSuccessCount: 0,
+  payFrequency: 0,
+  preferCountries: [] as string[],
+  disableCountries: [] as string[],
+  calcCurrency: 'USD',
+  interceptMin: 0,
+  disableCardTypes: [] as string[],
 });
 
 const currencyOptions = ref<{ label: string; value: string }[]>([]);
 const countryOptions = ref<{ label: string; value: string }[]>([]);
+const cardTypeOptions = ref<{ label: string; value: string }[]>([]);
+
+const limitModeOptions = Object.entries(ACCOUNT_LIMIT_MODE_LABELS).map(
+  ([value, label]) => ({ label, value }),
+);
 
 const paymentMethodOptions = Object.entries(PAYMENT_METHOD_LABELS).map(
   ([value, label]) => ({ label, value }),
@@ -103,15 +166,11 @@ const paymentFilterOptions = [
   ...paymentMethodOptions,
 ];
 
-const formGroupOptions = GROUP_OPTIONS.filter((item) => item.value);
-const formUserOptions = USER_OPTIONS.filter((item) => item.value);
-
-const interceptModeOptions = Object.entries(INTERCEPT_MODE_LABELS).map(
-  ([value, label]) => ({ label, value }),
-);
-
-const successModeOptions = Object.entries(SUCCESS_MODE_LABELS).map(
-  ([value, label]) => ({ label, value }),
+const selectedChannelLabel = computed(
+  () =>
+    CHANNEL_OPTIONS.find((item) => item.value === step1Form.channel)?.label ||
+    step1Form.channel ||
+    '',
 );
 
 const columns = [
@@ -125,7 +184,7 @@ const columns = [
   {
     title: '操作',
     key: 'actions',
-    width: 80,
+    width: 140,
     fixed: 'left' as const,
   },
   { title: '通道', dataIndex: 'channel', key: 'channel', width: 120 },
@@ -179,8 +238,6 @@ const filteredList = computed(() => {
   });
 });
 
-const modalTitle = computed(() => (editingId.value ? '编辑账号' : '新增账号'));
-
 function handleSearch() {
   applied.id = searchForm.id;
   applied.name = searchForm.name;
@@ -219,127 +276,229 @@ function applyListFilter(filter: typeof applied.listFilter) {
 
 async function loadConfigOptions() {
   try {
-    const [currencies, countries] = await Promise.all([
+    const [currencies, countries, cardTypes] = await Promise.all([
       getCurrencyOptions(),
       getCountryOptions(),
+      getCardTypeList(),
     ]);
     currencyOptions.value = currencies;
     countryOptions.value = countries;
+    cardTypeOptions.value = cardTypes.map((item) => ({
+      value: item.code,
+      label: `${item.nameLabel || item.name}（${item.code}）`,
+    }));
   } catch {
     currencyOptions.value = [];
     countryOptions.value = [];
+    cardTypeOptions.value = [];
   }
 }
 
-function resetForm() {
-  form.channel = 'PRO_card';
-  form.accountNo = '';
-  form.alias = '';
-  form.remark = '';
-  form.paymentMethod = 'card';
-  form.groupName = 'default';
-  form.assignedUser = 'none';
-  form.dailyOrderLimit = 0;
-  form.dailyAmountLimit = 0;
-  form.interceptMode = 'reset';
-  form.interceptCurrency = 'USD';
-  form.interceptMax = 0;
-  form.interceptMin = 0;
-  form.successMode = 'unlimited';
-  form.disableCountries = [];
-  form.preferCountries = [];
+function resetStep2Form() {
+  step2Form.accountNo = '';
+  step2Form.alias = '';
+  step2Form.status = 1;
+  step2Form.resetTime = undefined;
+  step2Form.dailyAmountLimit = 0;
+  step2Form.tradeCurrency = currencyOptions.value[0]?.value;
+  step2Form.sort = 0;
+  step2Form.publicKey = '';
+  step2Form.webSecret = '';
+  step2Form.siteB = undefined;
+  step2Form.dailyOrderLimit = 0;
+  step2Form.disableCountries = [];
+  step2Form.preferCountries = [];
+  step2Form.remark = '';
+  step2Form.privateKey = '';
 }
 
 function openCreate() {
-  editingId.value = null;
-  resetForm();
-  modalOpen.value = true;
+  step1Form.channel = undefined;
+  resetStep2Form();
+  viewMode.value = 'create-step1';
 }
 
-function openEdit(row: ChannelAccountRow) {
+function backToList() {
+  viewMode.value = 'list';
+}
+
+function submitStep1() {
+  if (!step1Form.channel) {
+    message.warning('请选择通道');
+    return;
+  }
+  resetStep2Form();
+  viewMode.value = 'create-step2';
+}
+
+function backToStep1() {
+  viewMode.value = 'create-step1';
+}
+
+function submitStep2() {
+  if (!step2Form.accountNo.trim()) {
+    message.warning('请输入通道账号');
+    return;
+  }
+  if (!step1Form.channel) {
+    message.warning('请先选择通道');
+    viewMode.value = 'create-step1';
+    return;
+  }
+
+  saving.value = true;
+  const reset = parseResetTime(step2Form.resetTime || 'beijing-0');
+  mockAccountList.value.unshift({
+    id: nextAccountIdValue(),
+    channel: step1Form.channel,
+    accountNo: step2Form.accountNo.trim(),
+    alias: step2Form.alias.trim(),
+    remark: step2Form.remark.trim(),
+    paymentMethod: 'card',
+    groupName: 'default',
+    assignedUser: 'none',
+    totalReceived: 0,
+    status: step2Form.status === 1,
+    resetTimezone: reset.timezone,
+    resetHour: reset.hour,
+    dailyOrderLimit: step2Form.dailyOrderLimit,
+    dailyAmountLimit: step2Form.dailyAmountLimit,
+    dailyRecvCount: 0,
+    dailyRecvAmount: 0,
+    interceptMode: 'reset',
+    interceptCurrency: step2Form.tradeCurrency || 'USD',
+    interceptMax: 0,
+    interceptMin: 0,
+    amountLimitMode: 'reset',
+    calcCurrency: step2Form.tradeCurrency || 'USD',
+    currencies: step2Form.tradeCurrency ? [step2Form.tradeCurrency] : [],
+    allowCountries: [],
+    allowCardTypes: [],
+    disableCardTypes: [],
+    disableCardBrands: [],
+    payFrequency: 0,
+    successCountLimit: 0,
+    maxSuccessCount: 0,
+    successMode: 'unlimited',
+    disableCountries: [...step2Form.disableCountries],
+    preferCountries: [...step2Form.preferCountries],
+    sort: step2Form.sort,
+    appId: step2Form.publicKey,
+    merchantId: '',
+    webSecret: step2Form.webSecret,
+    privateKey: step2Form.privateKey,
+    environment: 'live',
+    siteB: step2Form.siteB || '',
+    unpaidClosed: false,
+    restrictedClosed: false,
+    cannotOpenAt8: step2Form.siteB === 'none',
+    createdAt: nowText(),
+  });
+  saving.value = false;
+  message.success('已新增（静态，未接后端）');
+  backToList();
+}
+
+function onEdit(row: ChannelAccountRow) {
   editingId.value = row.id;
-  form.channel = row.channel;
-  form.accountNo = row.accountNo;
-  form.alias = row.alias;
-  form.remark = row.remark;
-  form.paymentMethod = row.paymentMethod;
-  form.groupName = row.groupName;
-  form.assignedUser = row.assignedUser;
-  form.dailyOrderLimit = row.dailyOrderLimit;
-  form.dailyAmountLimit = row.dailyAmountLimit;
-  form.interceptMode = row.interceptMode;
-  form.interceptCurrency = row.interceptCurrency;
-  form.interceptMax = row.interceptMax;
-  form.interceptMin = row.interceptMin;
-  form.successMode = row.successMode;
-  form.disableCountries = [...row.disableCountries];
-  form.preferCountries = [...row.preferCountries];
-  modalOpen.value = true;
+  editForm.accountNo = row.accountNo;
+  editForm.alias = row.alias;
+  editForm.status = row.status ? 1 : 0;
+  editForm.sort = row.sort;
+  editForm.appId = row.appId;
+  editForm.merchantId = row.merchantId;
+  editForm.webSecret = row.webSecret;
+  editForm.siteB = row.siteB || undefined;
+  editForm.remark = row.remark;
+  editForm.privateKey = row.privateKey;
+  editForm.environment = row.environment;
+  editOpen.value = true;
 }
 
-function handleSave() {
-  if (!form.channel.trim() || !form.accountNo.trim()) {
-    message.warning('请填写通道和账号名称');
+function onLimit(row: ChannelAccountRow) {
+  editingId.value = row.id;
+  void loadConfigOptions();
+  limitForm.resetHour = row.resetHour;
+  limitForm.dailyAmountLimit = row.dailyAmountLimit;
+  limitForm.currencies = [...row.currencies];
+  limitForm.successCountLimit = row.successCountLimit;
+  limitForm.allowCountries = [...row.allowCountries];
+  limitForm.amountLimitMode = row.amountLimitMode;
+  limitForm.interceptMax = row.interceptMax;
+  limitForm.allowCardTypes = [...row.allowCardTypes];
+  limitForm.disableCardBrands = [...row.disableCardBrands];
+  limitForm.dailyOrderLimit = row.dailyOrderLimit;
+  limitForm.maxSuccessCount = row.maxSuccessCount;
+  limitForm.payFrequency = row.payFrequency;
+  limitForm.preferCountries = [...row.preferCountries];
+  limitForm.disableCountries = [...row.disableCountries];
+  limitForm.calcCurrency = row.calcCurrency || row.interceptCurrency;
+  limitForm.interceptMin = row.interceptMin;
+  limitForm.disableCardTypes = [...row.disableCardTypes];
+  limitOpen.value = true;
+}
+
+function handleEditSave() {
+  if (!editForm.accountNo.trim()) {
+    message.warning('请输入通道账号');
+    return;
+  }
+  const row = mockAccountList.value.find((item) => item.id === editingId.value);
+  if (!row) {
+    message.warning('账号不存在');
     return;
   }
   saving.value = true;
-  if (editingId.value) {
-    const row = mockAccountList.value.find(
-      (item) => item.id === editingId.value,
-    );
-    if (row) {
-      Object.assign(row, {
-        channel: form.channel,
-        accountNo: form.accountNo,
-        alias: form.alias,
-        remark: form.remark,
-        paymentMethod: form.paymentMethod,
-        groupName: form.groupName,
-        assignedUser: form.assignedUser,
-        dailyOrderLimit: form.dailyOrderLimit,
-        dailyAmountLimit: form.dailyAmountLimit,
-        interceptMode: form.interceptMode,
-        interceptCurrency: form.interceptCurrency,
-        interceptMax: form.interceptMax,
-        interceptMin: form.interceptMin,
-        successMode: form.successMode,
-        disableCountries: [...form.disableCountries],
-        preferCountries: [...form.preferCountries],
-      });
-    }
-  } else {
-    mockAccountList.value.unshift({
-      id: nextAccountIdValue(),
-      channel: form.channel,
-      accountNo: form.accountNo,
-      alias: form.alias,
-      remark: form.remark,
-      paymentMethod: form.paymentMethod,
-      groupName: form.groupName,
-      assignedUser: form.assignedUser,
-      totalReceived: 0,
-      status: true,
-      resetTimezone: '北京时间',
-      resetHour: 0,
-      dailyOrderLimit: form.dailyOrderLimit,
-      dailyAmountLimit: form.dailyAmountLimit,
-      dailyRecvCount: 0,
-      dailyRecvAmount: 0,
-      interceptMode: form.interceptMode,
-      interceptCurrency: form.interceptCurrency,
-      interceptMax: form.interceptMax,
-      interceptMin: form.interceptMin,
-      successMode: form.successMode,
-      disableCountries: [...form.disableCountries],
-      preferCountries: [...form.preferCountries],
-      unpaidClosed: false,
-      restrictedClosed: false,
-      cannotOpenAt8: false,
-      createdAt: nowText(),
-    });
-  }
+  Object.assign(row, {
+    accountNo: editForm.accountNo.trim(),
+    alias: editForm.alias.trim(),
+    status: editForm.status === 1,
+    sort: editForm.sort,
+    appId: editForm.appId.trim(),
+    merchantId: editForm.merchantId.trim(),
+    webSecret: editForm.webSecret.trim(),
+    siteB: editForm.siteB || '',
+    remark: editForm.remark.trim(),
+    privateKey: editForm.privateKey.trim(),
+    environment: editForm.environment.trim(),
+    cannotOpenAt8: editForm.siteB === 'none',
+  });
   saving.value = false;
-  modalOpen.value = false;
+  editOpen.value = false;
+  message.success('已保存（静态，未接后端）');
+}
+
+function handleLimitSave() {
+  const row = mockAccountList.value.find((item) => item.id === editingId.value);
+  if (!row) {
+    message.warning('账号不存在');
+    return;
+  }
+  saving.value = true;
+  Object.assign(row, {
+    resetHour: limitForm.resetHour,
+    resetTimezone: '北京时间',
+    dailyAmountLimit: limitForm.dailyAmountLimit,
+    currencies: [...limitForm.currencies],
+    successCountLimit: limitForm.successCountLimit,
+    allowCountries: [...limitForm.allowCountries],
+    amountLimitMode: limitForm.amountLimitMode,
+    interceptMode: limitForm.amountLimitMode,
+    interceptMax: limitForm.interceptMax,
+    allowCardTypes: [...limitForm.allowCardTypes],
+    disableCardBrands: [...limitForm.disableCardBrands],
+    dailyOrderLimit: limitForm.dailyOrderLimit,
+    maxSuccessCount: limitForm.maxSuccessCount,
+    payFrequency: limitForm.payFrequency,
+    preferCountries: [...limitForm.preferCountries],
+    disableCountries: [...limitForm.disableCountries],
+    calcCurrency: limitForm.calcCurrency,
+    interceptCurrency: limitForm.calcCurrency,
+    interceptMin: limitForm.interceptMin,
+    disableCardTypes: [...limitForm.disableCardTypes],
+  });
+  saving.value = false;
+  limitOpen.value = false;
   message.success('已保存（静态，未接后端）');
 }
 
@@ -361,356 +520,708 @@ onMounted(() => {
 
 <template>
   <Page auto-content-height description="当前为静态预览，数据未接后端">
-    <Card class="mb-4" :bordered="false">
-      <Form layout="inline" class="gap-y-3">
-        <FormItem label="ID">
-          <InputNumber
-            v-model:value="searchForm.id"
-            :controls="false"
-            :min="1"
-            class="w-28"
-            placeholder="ID"
-          />
-        </FormItem>
-        <FormItem label="名称">
-          <Input
-            v-model:value="searchForm.name"
-            allow-clear
-            class="w-36"
-            placeholder="通道名称"
-          />
-        </FormItem>
-        <FormItem label="别名">
-          <Input
-            v-model:value="searchForm.alias"
-            allow-clear
-            class="w-36"
-            placeholder="别名"
-          />
-        </FormItem>
-        <FormItem label="备注">
-          <Input
-            v-model:value="searchForm.remark"
-            allow-clear
-            class="w-36"
-            placeholder="备注"
-          />
-        </FormItem>
-        <FormItem label="支付方式">
+    <template v-if="viewMode === 'list'">
+      <Card class="mb-4" :bordered="false">
+        <Form layout="inline" class="gap-y-3">
+          <FormItem label="ID">
+            <InputNumber
+              v-model:value="searchForm.id"
+              :controls="false"
+              :min="1"
+              class="w-28"
+              placeholder="ID"
+            />
+          </FormItem>
+          <FormItem label="名称">
+            <Input
+              v-model:value="searchForm.name"
+              allow-clear
+              class="w-36"
+              placeholder="通道名称"
+            />
+          </FormItem>
+          <FormItem label="别名">
+            <Input
+              v-model:value="searchForm.alias"
+              allow-clear
+              class="w-36"
+              placeholder="别名"
+            />
+          </FormItem>
+          <FormItem label="备注">
+            <Input
+              v-model:value="searchForm.remark"
+              allow-clear
+              class="w-36"
+              placeholder="备注"
+            />
+          </FormItem>
+          <FormItem label="支付方式">
+            <Select
+              v-model:value="searchForm.paymentMethod"
+              :options="paymentFilterOptions"
+              class="w-36"
+              placeholder="支付方式"
+            />
+          </FormItem>
+          <FormItem label="添加时间">
+            <RangePicker v-model:value="searchForm.createdRange" class="w-60" />
+          </FormItem>
+          <FormItem label="账号分组">
+            <Select
+              v-model:value="searchForm.groupName"
+              :options="GROUP_OPTIONS"
+              class="w-36"
+              placeholder="账号分组"
+            />
+          </FormItem>
+          <FormItem label="分配用户">
+            <Select
+              v-model:value="searchForm.assignedUser"
+              :options="USER_OPTIONS"
+              class="w-36"
+              placeholder="分配用户"
+            />
+          </FormItem>
+          <FormItem>
+            <Space>
+              <Button type="primary" @click="handleSearch">
+                <template #icon>
+                  <IconifyIcon icon="lucide:search" />
+                </template>
+                搜索
+              </Button>
+              <Button @click="resetSearch">
+                <template #icon>
+                  <IconifyIcon icon="lucide:rotate-ccw" />
+                </template>
+                重置
+              </Button>
+            </Space>
+          </FormItem>
+        </Form>
+      </Card>
+
+      <Card :bordered="false">
+        <div class="mb-4 flex flex-wrap justify-between gap-2">
+          <Space wrap>
+            <Button type="primary" @click="openCreate">
+              <template #icon>
+                <IconifyIcon icon="lucide:plus" />
+              </template>
+              新增
+            </Button>
+            <Button @click="onBatchEdit">批量修改</Button>
+            <Button danger type="primary" @click="applyListFilter('unpaid')">
+              <template #icon>
+                <IconifyIcon icon="lucide:clock" />
+              </template>
+              跳转未付关闭列表({{ unpaidCount }})
+            </Button>
+            <Button
+              danger
+              type="primary"
+              @click="applyListFilter('restricted')"
+            >
+              <template #icon>
+                <IconifyIcon icon="lucide:clock" />
+              </template>
+              账号受限关闭列表({{ restrictedCount }})
+            </Button>
+            <Button danger type="primary" @click="applyListFilter('closed8')">
+              <template #icon>
+                <IconifyIcon icon="lucide:clock" />
+              </template>
+              B站打不开({{ closed8Count }})
+            </Button>
+          </Space>
+          <Button @click="handleRefresh">
+            <template #icon>
+              <IconifyIcon icon="lucide:refresh-cw" />
+            </template>
+            刷新
+          </Button>
+        </div>
+
+        <Table
+          :columns="columns"
+          :data-source="filteredList"
+          :loading="loading"
+          :pagination="{ pageSize: 10, showSizeChanger: true }"
+          :scroll="{ x: 1800 }"
+          row-key="id"
+          size="small"
+        >
+          <template #bodyCell="{ column, record }">
+            <template v-if="column.key === 'actions'">
+              <Space>
+                <Tooltip title="编辑">
+                  <Button
+                    size="small"
+                    type="link"
+                    @click="onEdit(record as ChannelAccountRow)"
+                  >
+                    <IconifyIcon class="size-4" icon="lucide:pencil" />
+                  </Button>
+                </Tooltip>
+                <Tooltip title="限制">
+                  <Button
+                    size="small"
+                    type="link"
+                    @click="onLimit(record as ChannelAccountRow)"
+                  >
+                    <IconifyIcon
+                      class="size-4"
+                      icon="lucide:sliders-horizontal"
+                    />
+                  </Button>
+                </Tooltip>
+                <Tooltip title="收款信息（暂未开放）">
+                  <Button disabled size="small" type="link">
+                    <IconifyIcon class="size-4" icon="lucide:receipt" />
+                  </Button>
+                </Tooltip>
+              </Space>
+            </template>
+            <template v-else-if="column.key === 'groupName'">
+              {{ groupLabel(record.groupName) }}
+            </template>
+            <template v-else-if="column.key === 'totalReceived'">
+              {{ money(record.totalReceived) }}
+            </template>
+            <template v-else-if="column.key === 'status'">
+              <Switch
+                :checked="record.status"
+                size="small"
+                @change="
+                  (checked) =>
+                    onToggleStatus(record as ChannelAccountRow, checked)
+                "
+              />
+            </template>
+            <template v-else-if="column.key === 'amountSetting'">
+              <div class="text-xs leading-5">
+                <div>
+                  {{ record.resetTimezone }}:
+                  <span class="text-green-600">{{ record.resetHour }}点</span>
+                </div>
+                <div>
+                  日限单数:
+                  <span class="text-green-600">
+                    {{ record.dailyOrderLimit }}
+                  </span>
+                  <span class="mx-1">|</span>
+                  日限金额:
+                  <span class="text-orange-500">
+                    {{ money(record.dailyAmountLimit) }}
+                  </span>
+                  USD
+                </div>
+                <div>
+                  日收笔数:
+                  <span class="text-green-600">
+                    {{ record.dailyRecvCount }}
+                  </span>
+                  <span class="mx-1">|</span>
+                  日收金额:
+                  <span class="text-orange-500">
+                    {{ money(record.dailyRecvAmount) }}
+                  </span>
+                  USD
+                </div>
+              </div>
+            </template>
+            <template v-else-if="column.key === 'intercept'">
+              <div class="text-xs leading-5">
+                <div>
+                  模式
+                  <span class="text-red-500">
+                    {{
+                      ACCOUNT_LIMIT_MODE_LABELS[record.interceptMode] ||
+                      INTERCEPT_MODE_LABELS[record.interceptMode] ||
+                      record.interceptMode
+                    }}
+                  </span>
+                  <span class="mx-1">|</span>
+                  货币
+                  <span class="text-red-500">
+                    {{ record.interceptCurrency }}
+                  </span>
+                </div>
+                <div>
+                  最高
+                  <span class="text-orange-500">
+                    {{ money(record.interceptMax) }}
+                  </span>
+                  <span class="mx-1">|</span>
+                  最低
+                  <span class="text-orange-500">
+                    {{ money(record.interceptMin) }}
+                  </span>
+                </div>
+              </div>
+            </template>
+            <template v-else-if="column.key === 'successMode'">
+              <span
+                :class="
+                  record.successMode === 'unlimited'
+                    ? 'text-green-600'
+                    : 'text-orange-500'
+                "
+              >
+                {{ SUCCESS_MODE_LABELS[record.successMode] }}
+              </span>
+            </template>
+            <template v-else-if="column.key === 'disableCountries'">
+              <Space wrap size="small">
+                <Tag v-for="code in record.disableCountries" :key="code">
+                  {{ code }}
+                </Tag>
+              </Space>
+            </template>
+            <template v-else-if="column.key === 'preferCountries'">
+              <Space wrap size="small">
+                <Tag
+                  v-for="code in record.preferCountries"
+                  :key="code"
+                  color="blue"
+                >
+                  {{ code }}
+                </Tag>
+              </Space>
+            </template>
+          </template>
+        </Table>
+      </Card>
+    </template>
+
+    <Card v-else-if="viewMode === 'create-step1'" :bordered="false">
+      <div class="mb-6 text-lg font-medium">新增</div>
+      <Form layout="vertical" class="max-w-md">
+        <FormItem label="通道" required>
           <Select
-            v-model:value="searchForm.paymentMethod"
-            :options="paymentFilterOptions"
-            class="w-36"
-            placeholder="支付方式"
-          />
-        </FormItem>
-        <FormItem label="添加时间">
-          <RangePicker v-model:value="searchForm.createdRange" class="w-60" />
-        </FormItem>
-        <FormItem label="账号分组">
-          <Select
-            v-model:value="searchForm.groupName"
-            :options="GROUP_OPTIONS"
-            class="w-36"
-            placeholder="账号分组"
-          />
-        </FormItem>
-        <FormItem label="分配用户">
-          <Select
-            v-model:value="searchForm.assignedUser"
-            :options="USER_OPTIONS"
-            class="w-36"
-            placeholder="分配用户"
+            v-model:value="step1Form.channel"
+            :options="CHANNEL_OPTIONS"
+            placeholder="请选择一项"
+            show-search
+            option-filter-prop="label"
           />
         </FormItem>
         <FormItem>
           <Space>
-            <Button type="primary" @click="handleSearch">
-              <template #icon>
-                <IconifyIcon icon="lucide:search" />
-              </template>
-              搜索
-            </Button>
-            <Button @click="resetSearch">
-              <template #icon>
-                <IconifyIcon icon="lucide:rotate-ccw" />
-              </template>
-              重置
-            </Button>
+            <Button type="primary" @click="submitStep1">提交</Button>
+            <Button @click="backToList">返回</Button>
           </Space>
         </FormItem>
       </Form>
     </Card>
 
-    <Card :bordered="false">
-      <div class="mb-4 flex flex-wrap justify-between gap-2">
-        <Space wrap>
-          <Button type="primary" @click="openCreate">
-            <template #icon>
-              <IconifyIcon icon="lucide:plus" />
-            </template>
-            新增
-          </Button>
-          <Button @click="onBatchEdit">批量修改</Button>
-          <Button danger type="primary" @click="applyListFilter('unpaid')">
-            <template #icon>
-              <IconifyIcon icon="lucide:clock" />
-            </template>
-            跳转未付关闭列表({{ unpaidCount }})
-          </Button>
-          <Button danger type="primary" @click="applyListFilter('restricted')">
-            <template #icon>
-              <IconifyIcon icon="lucide:clock" />
-            </template>
-            账号受限关闭列表({{ restrictedCount }})
-          </Button>
-          <Button danger type="primary" @click="applyListFilter('closed8')">
-            <template #icon>
-              <IconifyIcon icon="lucide:clock" />
-            </template>
-            B站打不开({{ closed8Count }})
-          </Button>
-        </Space>
-        <Button @click="handleRefresh">
-          <template #icon>
-            <IconifyIcon icon="lucide:refresh-cw" />
-          </template>
-          刷新
-        </Button>
-      </div>
-
-      <Table
-        :columns="columns"
-        :data-source="filteredList"
-        :loading="loading"
-        :pagination="{ pageSize: 10, showSizeChanger: true }"
-        :scroll="{ x: 1800 }"
-        row-key="id"
-        size="small"
-      >
-        <template #bodyCell="{ column, record }">
-          <template v-if="column.key === 'actions'">
-            <Button
-              type="link"
-              size="small"
-              @click="openEdit(record as ChannelAccountRow)"
-            >
-              <IconifyIcon icon="lucide:pencil" />
-            </Button>
-          </template>
-          <template v-else-if="column.key === 'groupName'">
-            {{ groupLabel(record.groupName) }}
-          </template>
-          <template v-else-if="column.key === 'totalReceived'">
-            {{ money(record.totalReceived) }}
-          </template>
-          <template v-else-if="column.key === 'status'">
-            <Switch
-              :checked="record.status"
-              size="small"
-              @change="
-                (checked) =>
-                  onToggleStatus(record as ChannelAccountRow, checked)
-              "
-            />
-          </template>
-          <template v-else-if="column.key === 'amountSetting'">
-            <div class="text-xs leading-5">
-              <div>
-                {{ record.resetTimezone }}:
-                <span class="text-green-600">{{ record.resetHour }}点</span>
-              </div>
-              <div>
-                日限单数:
-                <span class="text-green-600">{{ record.dailyOrderLimit }}</span>
-                <span class="mx-1">|</span>
-                日限金额:
-                <span class="text-orange-500">
-                  {{ money(record.dailyAmountLimit) }}
-                </span>
-                USD
-              </div>
-              <div>
-                日收笔数:
-                <span class="text-green-600">{{ record.dailyRecvCount }}</span>
-                <span class="mx-1">|</span>
-                日收金额:
-                <span class="text-orange-500">
-                  {{ money(record.dailyRecvAmount) }}
-                </span>
-                USD
-              </div>
-            </div>
-          </template>
-          <template v-else-if="column.key === 'intercept'">
-            <div class="text-xs leading-5">
-              <div>
-                模式
-                <span class="text-red-500">
-                  {{ INTERCEPT_MODE_LABELS[record.interceptMode] }}
-                </span>
-                <span class="mx-1">|</span>
-                货币
-                <span class="text-red-500">{{ record.interceptCurrency }}</span>
-              </div>
-              <div>
-                最高
-                <span class="text-orange-500">
-                  {{ money(record.interceptMax) }}
-                </span>
-                <span class="mx-1">|</span>
-                最低
-                <span class="text-orange-500">
-                  {{ money(record.interceptMin) }}
-                </span>
-              </div>
-            </div>
-          </template>
-          <template v-else-if="column.key === 'successMode'">
-            <span
-              :class="
-                record.successMode === 'unlimited'
-                  ? 'text-green-600'
-                  : 'text-orange-500'
-              "
-            >
-              {{ SUCCESS_MODE_LABELS[record.successMode] }}
-            </span>
-          </template>
-          <template v-else-if="column.key === 'disableCountries'">
-            <Space wrap size="small">
-              <Tag v-for="code in record.disableCountries" :key="code">
-                {{ code }}
-              </Tag>
-            </Space>
-          </template>
-          <template v-else-if="column.key === 'preferCountries'">
-            <Space wrap size="small">
-              <Tag
-                v-for="code in record.preferCountries"
-                :key="code"
-                color="blue"
-              >
-                {{ code }}
-              </Tag>
-            </Space>
-          </template>
-        </template>
-      </Table>
-    </Card>
-
-    <Modal
-      v-model:open="modalOpen"
-      :confirm-loading="saving"
-      :title="modalTitle"
-      destroy-on-close
-      width="640px"
-      @ok="handleSave"
-    >
-      <Form layout="vertical" class="pt-2">
-        <div class="grid grid-cols-2 gap-x-4">
-          <FormItem label="通道" required>
-            <Select v-model:value="form.channel" :options="CHANNEL_OPTIONS" />
+    <Card v-else :bordered="false">
+      <div class="mb-6 text-lg font-medium">新增</div>
+      <Form layout="vertical">
+        <div class="mb-4 max-w-md">
+          <FormItem label="通道">
+            <Input :value="selectedChannelLabel" disabled />
           </FormItem>
-          <FormItem label="账号名称" required>
-            <Input v-model:value="form.accountNo" placeholder="账号名称" />
+        </div>
+
+        <div class="grid max-w-5xl grid-cols-1 gap-x-8 md:grid-cols-2">
+          <FormItem label="通道账号" required>
+            <Input
+              v-model:value="step2Form.accountNo"
+              placeholder="请输入通道账号"
+            />
           </FormItem>
           <FormItem label="别名">
-            <Input v-model:value="form.alias" placeholder="别名" />
+            <Input v-model:value="step2Form.alias" placeholder="请输入别名" />
           </FormItem>
-          <FormItem label="支付方式">
+
+          <FormItem label="状态">
             <Select
-              v-model:value="form.paymentMethod"
-              :options="paymentMethodOptions"
+              v-model:value="step2Form.status"
+              :options="STATUS_OPTIONS"
             />
           </FormItem>
-          <FormItem label="账号分组">
+          <FormItem label="B站">
             <Select
-              v-model:value="form.groupName"
-              :options="formGroupOptions"
+              v-model:value="step2Form.siteB"
+              :options="SITE_B_OPTIONS"
+              placeholder="请选择一个"
             />
           </FormItem>
-          <FormItem label="分配用户">
+
+          <FormItem label="重置时间">
             <Select
-              v-model:value="form.assignedUser"
-              :options="formUserOptions"
+              v-model:value="step2Form.resetTime"
+              :options="RESET_TIME_OPTIONS"
+              placeholder="请选择一个"
             />
+            <div class="text-muted-foreground mt-1 text-xs">
+              每日限额重置的北京时间
+            </div>
           </FormItem>
           <FormItem label="日限单数">
             <InputNumber
-              v-model:value="form.dailyOrderLimit"
+              v-model:value="step2Form.dailyOrderLimit"
               :min="0"
               class="w-full"
             />
+            <div class="text-muted-foreground mt-1 text-xs">
+              每日最大成功单数
+            </div>
           </FormItem>
-          <FormItem label="日限金额">
+
+          <FormItem label="日限金额(美元)">
             <InputNumber
-              v-model:value="form.dailyAmountLimit"
+              v-model:value="step2Form.dailyAmountLimit"
               :min="0"
               class="w-full"
             />
           </FormItem>
-          <FormItem label="拦截模式">
+          <FormItem label="限制国家">
             <Select
-              v-model:value="form.interceptMode"
-              :options="interceptModeOptions"
-            />
-          </FormItem>
-          <FormItem label="拦截货币">
-            <Select
-              v-model:value="form.interceptCurrency"
-              :options="currencyOptions"
+              v-model:value="step2Form.disableCountries"
+              :options="countryOptions"
+              allow-clear
+              mode="multiple"
               option-filter-prop="label"
-              placeholder="请选择货币"
+              placeholder="请选择限制国家"
               show-search
             />
           </FormItem>
-          <FormItem label="拦截最高">
-            <InputNumber
-              v-model:value="form.interceptMax"
-              :min="0"
-              class="w-full"
-            />
-          </FormItem>
-          <FormItem label="拦截最低">
-            <InputNumber
-              v-model:value="form.interceptMin"
-              :min="0"
-              class="w-full"
-            />
-          </FormItem>
-          <FormItem label="成功设置">
+
+          <FormItem label="交易货币">
             <Select
-              v-model:value="form.successMode"
-              :options="successModeOptions"
+              v-model:value="step2Form.tradeCurrency"
+              :options="currencyOptions"
+              option-filter-prop="label"
+              placeholder="请选择交易货币"
+              show-search
+            />
+          </FormItem>
+          <FormItem label="仅支持国家">
+            <Select
+              v-model:value="step2Form.preferCountries"
+              :options="countryOptions"
+              allow-clear
+              mode="multiple"
+              option-filter-prop="label"
+              placeholder="请选择仅支持国家"
+              show-search
+            />
+          </FormItem>
+
+          <FormItem label="排序">
+            <InputNumber
+              v-model:value="step2Form.sort"
+              :min="0"
+              class="w-full"
+            />
+          </FormItem>
+          <FormItem label="备注">
+            <Input v-model:value="step2Form.remark" placeholder="请输入备注" />
+          </FormItem>
+
+          <FormItem label="公钥">
+            <Input
+              v-model:value="step2Form.publicKey"
+              placeholder="请输入公钥"
+            />
+          </FormItem>
+          <FormItem label="私钥">
+            <Input
+              v-model:value="step2Form.privateKey"
+              placeholder="请输入私钥"
+            />
+          </FormItem>
+
+          <FormItem label="web秘钥">
+            <Input
+              v-model:value="step2Form.webSecret"
+              placeholder="请输入web秘钥"
             />
           </FormItem>
         </div>
-        <FormItem label="备注">
-          <Input v-model:value="form.remark" placeholder="备注" />
+
+        <FormItem class="mt-2">
+          <Space>
+            <Button :loading="saving" type="primary" @click="submitStep2">
+              提交
+            </Button>
+            <Button @click="backToStep1">返回</Button>
+          </Space>
         </FormItem>
-        <FormItem label="禁用国家">
-          <Select
-            v-model:value="form.disableCountries"
-            :options="countryOptions"
-            allow-clear
-            mode="multiple"
-            option-filter-prop="label"
-            placeholder="请选择禁用国家"
-            show-search
-          />
-        </FormItem>
-        <FormItem label="优先国家">
-          <Select
-            v-model:value="form.preferCountries"
-            :options="countryOptions"
-            allow-clear
-            mode="multiple"
-            option-filter-prop="label"
-            placeholder="请选择优先国家"
-            show-search
-          />
-        </FormItem>
+      </Form>
+    </Card>
+
+    <Modal
+      v-model:open="editOpen"
+      :confirm-loading="saving"
+      destroy-on-close
+      title="编辑"
+      width="880px"
+      @ok="handleEditSave"
+    >
+      <Form class="mt-2" layout="vertical">
+        <div class="grid grid-cols-1 gap-x-10 md:grid-cols-2">
+          <FormItem label="通道账号" required>
+            <Input
+              v-model:value="editForm.accountNo"
+              placeholder="请输入通道账号"
+            />
+          </FormItem>
+          <FormItem label="别名">
+            <Input v-model:value="editForm.alias" placeholder="请输入别名" />
+          </FormItem>
+          <FormItem label="状态">
+            <Select v-model:value="editForm.status" :options="STATUS_OPTIONS" />
+          </FormItem>
+          <FormItem label="B站">
+            <Select
+              v-model:value="editForm.siteB"
+              :options="SITE_B_OPTIONS"
+              allow-clear
+              placeholder="请选择一个"
+            />
+          </FormItem>
+          <FormItem label="排序">
+            <InputNumber
+              v-model:value="editForm.sort"
+              :min="0"
+              class="w-full"
+            />
+          </FormItem>
+          <FormItem label="备注">
+            <Input v-model:value="editForm.remark" placeholder="请输入备注" />
+          </FormItem>
+          <FormItem label="应用ID">
+            <Input v-model:value="editForm.appId" placeholder="请输入应用ID" />
+          </FormItem>
+          <FormItem label="秘钥">
+            <Input
+              v-model:value="editForm.privateKey"
+              placeholder="请输入秘钥"
+            />
+          </FormItem>
+          <FormItem label="商户ID">
+            <Input
+              v-model:value="editForm.merchantId"
+              placeholder="请输入商户ID"
+            />
+          </FormItem>
+          <FormItem label="环境">
+            <Input
+              v-model:value="editForm.environment"
+              placeholder="请输入环境"
+            />
+          </FormItem>
+          <FormItem label="web秘钥(填1)">
+            <Input
+              v-model:value="editForm.webSecret"
+              placeholder="请输入web秘钥"
+            />
+          </FormItem>
+        </div>
+      </Form>
+    </Modal>
+
+    <Modal
+      v-model:open="limitOpen"
+      :confirm-loading="saving"
+      destroy-on-close
+      title="限制"
+      width="880px"
+      @ok="handleLimitSave"
+    >
+      <Form class="mt-2" layout="vertical">
+        <div class="grid grid-cols-1 gap-x-10 md:grid-cols-2">
+          <div>
+            <FormItem label="重置时间">
+              <Select
+                v-model:value="limitForm.resetHour"
+                :options="RESET_HOUR_OPTIONS"
+                placeholder="请选择一个"
+              />
+              <div class="text-muted-foreground mt-1 text-xs">
+                每日限制重置的北京时间
+              </div>
+            </FormItem>
+            <FormItem label="日限金额(USD)">
+              <InputNumber
+                v-model:value="limitForm.dailyAmountLimit"
+                :min="0"
+                :precision="2"
+                class="w-full"
+              />
+            </FormItem>
+            <FormItem label="支付货币">
+              <Select
+                v-model:value="limitForm.currencies"
+                :options="currencyOptions"
+                allow-clear
+                mode="multiple"
+                option-filter-prop="label"
+                placeholder="请选择支付货币"
+                show-search
+              />
+              <div class="text-muted-foreground mt-1 text-xs">
+                某些支付方式仅支持一种货币
+              </div>
+            </FormItem>
+            <FormItem label="指定时间内限制成功次数">
+              <InputNumber
+                v-model:value="limitForm.successCountLimit"
+                :min="0"
+                class="w-full"
+              />
+              <div class="text-muted-foreground mt-1 text-xs">
+                配合"支付频率(day)"使用
+              </div>
+            </FormItem>
+            <FormItem label="仅支持国家">
+              <Select
+                v-model:value="limitForm.allowCountries"
+                :options="countryOptions"
+                allow-clear
+                mode="multiple"
+                option-filter-prop="label"
+                placeholder="请选择仅支持国家"
+                show-search
+              />
+              <div class="text-muted-foreground mt-1 text-xs">
+                填写后其他国家会被拦截
+              </div>
+            </FormItem>
+            <FormItem label="金额限制模式">
+              <Select
+                v-model:value="limitForm.amountLimitMode"
+                :options="limitModeOptions"
+                placeholder="请选择"
+              />
+              <div class="text-muted-foreground mt-1 text-xs">
+                重置:超过120只收120,拦截:超过120不收
+              </div>
+            </FormItem>
+            <FormItem label="限制最大金额">
+              <InputNumber
+                v-model:value="limitForm.interceptMax"
+                :min="0"
+                :precision="2"
+                class="w-full"
+              />
+            </FormItem>
+            <FormItem label="仅支持卡类型">
+              <Select
+                v-model:value="limitForm.allowCardTypes"
+                :options="cardTypeOptions"
+                allow-clear
+                mode="multiple"
+                option-filter-prop="label"
+                placeholder="请选择一项或多项"
+                show-search
+              />
+            </FormItem>
+            <FormItem label="禁用卡头">
+              <Select
+                v-model:value="limitForm.disableCardBrands"
+                :options="toOptions(CARD_BRAND_LABELS)"
+                allow-clear
+                disabled
+                mode="multiple"
+                placeholder="暂未开放"
+              />
+            </FormItem>
+          </div>
+          <div>
+            <FormItem label="日限单数">
+              <InputNumber
+                v-model:value="limitForm.dailyOrderLimit"
+                :min="0"
+                class="w-full"
+              />
+              <div class="text-muted-foreground mt-1 text-xs">
+                每日最大成功单数
+              </div>
+            </FormItem>
+            <FormItem label="最多收款笔数">
+              <InputNumber
+                v-model:value="limitForm.maxSuccessCount"
+                :min="0"
+                class="w-full"
+              />
+              <div class="text-muted-foreground mt-1 text-xs">
+                该账号最多成功笔数
+              </div>
+            </FormItem>
+            <FormItem label="支付频率(day)">
+              <InputNumber
+                v-model:value="limitForm.payFrequency"
+                :min="0"
+                class="w-full"
+              />
+              <div class="text-muted-foreground mt-1 text-xs">
+                配合"指定时间内限制成功次数"使用
+              </div>
+            </FormItem>
+            <FormItem label="优先国家">
+              <Select
+                v-model:value="limitForm.preferCountries"
+                :options="countryOptions"
+                allow-clear
+                mode="multiple"
+                option-filter-prop="label"
+                placeholder="请选择优先国家"
+                show-search
+              />
+              <div class="text-muted-foreground mt-1 text-xs">账号优先收单</div>
+            </FormItem>
+            <FormItem label="禁用国家">
+              <Select
+                v-model:value="limitForm.disableCountries"
+                :options="countryOptions"
+                allow-clear
+                mode="multiple"
+                option-filter-prop="label"
+                placeholder="请选择禁用国家"
+                show-search
+              />
+              <div class="text-muted-foreground mt-1 text-xs">
+                填写后国家会被拦截
+              </div>
+            </FormItem>
+            <FormItem label="计算货币">
+              <Select
+                v-model:value="limitForm.calcCurrency"
+                :options="currencyOptions"
+                option-filter-prop="label"
+                placeholder="请选择计算货币"
+                show-search
+              />
+              <div class="text-muted-foreground mt-1 text-xs">
+                限制金额时使用
+              </div>
+            </FormItem>
+            <FormItem label="限制最小金额">
+              <InputNumber
+                v-model:value="limitForm.interceptMin"
+                :min="0"
+                :precision="2"
+                class="w-full"
+              />
+            </FormItem>
+            <FormItem label="禁用卡类型">
+              <Select
+                v-model:value="limitForm.disableCardTypes"
+                :options="cardTypeOptions"
+                allow-clear
+                mode="multiple"
+                option-filter-prop="label"
+                placeholder="请选择一项或多项"
+                show-search
+              />
+            </FormItem>
+          </div>
+        </div>
       </Form>
     </Modal>
   </Page>

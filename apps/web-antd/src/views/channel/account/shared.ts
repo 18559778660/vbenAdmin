@@ -3,32 +3,59 @@ import { ref } from 'vue';
 export type ChannelAccountRow = {
   accountNo: string;
   alias: string;
+  allowCardTypes: string[];
+  allowCountries: string[];
+  amountLimitMode: string;
+  appId: string;
   assignedUser: string;
+  calcCurrency: string;
   cannotOpenAt8: boolean;
   channel: string;
   createdAt: string;
+  currencies: string[];
   dailyAmountLimit: number;
   dailyOrderLimit: number;
   dailyRecvAmount: number;
   dailyRecvCount: number;
+  disableCardBrands: string[];
+  disableCardTypes: string[];
   disableCountries: string[];
+  environment: string;
   groupName: string;
   id: number;
   interceptCurrency: string;
   interceptMax: number;
   interceptMin: number;
   interceptMode: string;
+  maxSuccessCount: number;
+  merchantId: string;
+  payFrequency: number;
   paymentMethod: string;
   preferCountries: string[];
+  privateKey: string;
   remark: string;
   resetHour: number;
   resetTimezone: string;
   restrictedClosed: boolean;
+  siteB: string;
+  sort: number;
   status: boolean;
+  successCountLimit: number;
   successMode: string;
   totalReceived: number;
   unpaidClosed: boolean;
+  webSecret: string;
 };
+
+export const ACCOUNT_LIMIT_MODE_LABELS: Record<string, string> = {
+  reset: '重置',
+  intercept: '拦截',
+};
+
+export const RESET_HOUR_OPTIONS = [
+  { label: '0点', value: 0 },
+  { label: '8点', value: 8 },
+];
 
 export const PAYMENT_METHOD_LABELS: Record<string, string> = {
   card: '信用卡',
@@ -54,24 +81,59 @@ export const USER_OPTIONS = [
 ];
 
 export const CHANNEL_OPTIONS = [
+  { label: 'worldFirst', value: 'worldFirst' },
+  { label: 'test', value: 'test' },
   { label: 'PRO_card', value: 'PRO_card' },
+  { label: 'supay_card', value: 'supay_card' },
+  { label: 'square', value: 'square' },
+  { label: 'square_card', value: 'square_card' },
+  { label: 'PRO_jump', value: 'PRO_jump' },
+  { label: 'stripe', value: 'stripe' },
   { label: 'antom', value: 'antom' },
-  { label: 'stripe_us', value: 'stripe_us' },
 ];
+
+export const STATUS_OPTIONS = [
+  { label: '启用', value: 1 },
+  { label: '禁用', value: 0 },
+];
+
+export const RESET_TIME_OPTIONS = [
+  { label: '北京时间 0点', value: 'beijing-0' },
+  { label: '北京时间 8点', value: 'beijing-8' },
+  { label: '北美夏令时间 0点', value: 'us-dst-0' },
+  { label: '北美夏令时间 8点', value: 'us-dst-8' },
+];
+
+export const SITE_B_OPTIONS = [
+  { label: 'www.havetr.com', value: 'www.havetr.com' },
+  { label: '默认B站', value: 'default' },
+  { label: '备用B站', value: 'backup' },
+  { label: '暂不绑定', value: 'none' },
+];
+
+export function parseResetTime(value: string) {
+  const map: Record<string, { hour: number; timezone: string }> = {
+    'beijing-0': { timezone: '北京时间', hour: 0 },
+    'beijing-8': { timezone: '北京时间', hour: 8 },
+    'us-dst-0': { timezone: '北美夏令时间', hour: 0 },
+    'us-dst-8': { timezone: '北美夏令时间', hour: 8 },
+  };
+  return map[value] ?? { timezone: '北京时间', hour: 0 };
+}
 
 export const mockAccountList = ref<ChannelAccountRow[]>([
   {
     id: 491,
     channel: 'PRO_card',
-    accountNo: 'MK84PPazdc',
-    alias: 'pcard需绑卡支付 / pp_card小杰',
-    remark: '主账号',
+    accountNo: 'MK84PP/acdc',
+    alias: 'havetr.com',
+    remark: '重新打开',
     paymentMethod: 'card',
     groupName: 'default',
     assignedUser: 'admin',
     totalReceived: 124_437.63,
     status: true,
-    resetTimezone: '北美夏令时间',
+    resetTimezone: '北京时间',
     resetHour: 0,
     dailyOrderLimit: 0,
     dailyAmountLimit: 8000,
@@ -81,9 +143,28 @@ export const mockAccountList = ref<ChannelAccountRow[]>([
     interceptCurrency: 'USD',
     interceptMax: 150,
     interceptMin: 0,
+    amountLimitMode: 'reset',
+    calcCurrency: 'USD',
+    currencies: [],
+    allowCountries: [],
+    allowCardTypes: [],
+    disableCardTypes: [],
+    disableCardBrands: [],
+    payFrequency: 0,
+    successCountLimit: 0,
+    maxSuccessCount: 0,
     successMode: 'unlimited',
     disableCountries: ['IL'],
     preferCountries: [],
+    sort: 0,
+    appId:
+      'AR3owxYj9Xcy6F3rwn45t_b07_R9WtGy4aAer5yCnYli5zOy56YDbPZrZ3_AjdL_Ddg40lT2cwMgstVo',
+    merchantId: '',
+    webSecret: '18K25823E2849902A',
+    privateKey:
+      'EMKHiWJeK9csY6XZ2l_-zfcOpPpWchD_oZv2VxHOL68C1tM40ta453IIzjIvJ6R3ZbsALqq0rCKIu2Ca',
+    environment: 'live',
+    siteB: 'www.havetr.com',
     unpaidClosed: false,
     restrictedClosed: false,
     cannotOpenAt8: false,
@@ -110,9 +191,26 @@ export const mockAccountList = ref<ChannelAccountRow[]>([
     interceptCurrency: 'USD',
     interceptMax: 80,
     interceptMin: 1,
+    amountLimitMode: 'intercept',
+    calcCurrency: 'USD',
+    currencies: ['USD'],
+    allowCountries: [],
+    allowCardTypes: [],
+    disableCardTypes: [],
+    disableCardBrands: [],
+    payFrequency: 0,
+    successCountLimit: 0,
+    maxSuccessCount: 0,
     successMode: 'unlimited',
     disableCountries: [],
     preferCountries: ['US', 'CA'],
+    sort: 0,
+    appId: '',
+    merchantId: '',
+    webSecret: '',
+    privateKey: '',
+    environment: 'live',
+    siteB: 'default',
     unpaidClosed: false,
     restrictedClosed: false,
     cannotOpenAt8: true,
@@ -139,9 +237,26 @@ export const mockAccountList = ref<ChannelAccountRow[]>([
     interceptCurrency: 'USD',
     interceptMax: 50,
     interceptMin: 0,
+    amountLimitMode: 'reset',
+    calcCurrency: 'USD',
+    currencies: [],
+    allowCountries: [],
+    allowCardTypes: [],
+    disableCardTypes: [],
+    disableCardBrands: [],
+    payFrequency: 0,
+    successCountLimit: 0,
+    maxSuccessCount: 0,
     successMode: 'limited',
     disableCountries: ['CN', 'RU'],
     preferCountries: ['US'],
+    sort: 0,
+    appId: '',
+    merchantId: '',
+    webSecret: '',
+    privateKey: '',
+    environment: 'sandbox',
+    siteB: 'none',
     unpaidClosed: false,
     restrictedClosed: true,
     cannotOpenAt8: false,
