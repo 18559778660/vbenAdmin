@@ -98,7 +98,7 @@ const routes: RouteRecordRaw[] = [
       {
         name: 'ChannelAccount',
         path: 'account',
-        component: Placeholder,
+        component: () => import('#/views/channel/account/index.vue'),
         meta: {
           icon: 'lucide:user-cog',
           title: $t('page.channel.account'),
