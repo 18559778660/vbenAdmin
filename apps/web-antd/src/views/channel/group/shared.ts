@@ -1,6 +1,9 @@
 import { ref } from 'vue';
 
 export type ChannelGroupRow = {
+  allowCardTypes: string[];
+  allowCountries: string[];
+  autoShip: boolean;
   availableAccountCount: number;
   balance: number;
   code: string;
@@ -11,6 +14,9 @@ export type ChannelGroupRow = {
   dailyOrderLimit: number;
   dailyRecvAmount: number;
   dailyRecvCount: number;
+  disableCardBrands: string[];
+  disableCardTypes: string[];
+  disableCountries: string[];
   failLimitCount: number;
   gateway: boolean;
   id: number;
@@ -21,6 +27,7 @@ export type ChannelGroupRow = {
   name: string;
   oldCustomerDays: number;
   payFrequencyDays: number;
+  preferCountries: string[];
   successLimitCount: number;
   totalAmount: number;
   updatedAt: string;
@@ -54,6 +61,13 @@ export const mockChannelGroupList = ref<ChannelGroupRow[]>([
     interceptCurrency: 'USD',
     interceptMax: 0,
     interceptMin: 0,
+    preferCountries: [] as string[],
+    disableCountries: [] as string[],
+    allowCountries: [] as string[],
+    allowCardTypes: [] as string[],
+    disableCardTypes: [] as string[],
+    disableCardBrands: [] as string[],
+    autoShip: true,
     gateway: true,
     oldCustomerDays: 30,
     collectRule: 'random',
@@ -80,6 +94,13 @@ export const mockChannelGroupList = ref<ChannelGroupRow[]>([
     interceptCurrency: 'USD',
     interceptMax: 0,
     interceptMin: 0,
+    preferCountries: [] as string[],
+    disableCountries: [] as string[],
+    allowCountries: [] as string[],
+    allowCardTypes: [] as string[],
+    disableCardTypes: [] as string[],
+    disableCardBrands: [] as string[],
+    autoShip: true,
     gateway: true,
     oldCustomerDays: 1,
     collectRule: 'random',
@@ -106,6 +127,13 @@ export const mockChannelGroupList = ref<ChannelGroupRow[]>([
     interceptCurrency: 'USD',
     interceptMax: 150,
     interceptMin: 0,
+    preferCountries: ['US'],
+    disableCountries: [],
+    allowCountries: [],
+    allowCardTypes: [],
+    disableCardTypes: [],
+    disableCardBrands: [],
+    autoShip: true,
     gateway: false,
     oldCustomerDays: 30,
     collectRule: 'round',
@@ -132,6 +160,13 @@ export const mockChannelGroupList = ref<ChannelGroupRow[]>([
     interceptCurrency: 'USD',
     interceptMax: 100,
     interceptMin: 0,
+    preferCountries: [],
+    disableCountries: ['CN'],
+    allowCountries: [],
+    allowCardTypes: [],
+    disableCardTypes: [],
+    disableCardBrands: [],
+    autoShip: false,
     gateway: true,
     oldCustomerDays: 7,
     collectRule: 'random',
@@ -241,4 +276,12 @@ export function remarkText(row: ChannelGroupRow) {
 
 export function getGroupAccounts(groupId: number) {
   return mockGroupAccountList.value.filter((item) => item.groupId === groupId);
+}
+
+let nextGroupId = 114;
+
+export function nextGroupIdValue() {
+  const id = nextGroupId;
+  nextGroupId += 1;
+  return id;
 }

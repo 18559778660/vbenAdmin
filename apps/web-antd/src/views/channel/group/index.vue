@@ -1,7 +1,7 @@
 <script lang="ts" setup>
 import type { ChannelGroupRow } from './shared';
 
-import { computed, reactive, ref } from 'vue';
+import { computed, onMounted, reactive, ref } from 'vue';
 
 import { Page } from '@vben/common-ui';
 import { IconifyIcon } from '@vben/icons';
@@ -15,6 +15,8 @@ import {
   InputNumber,
   message,
   Modal,
+  Radio,
+  RadioGroup,
   Select,
   Space,
   Table,
@@ -22,16 +24,19 @@ import {
   Tooltip,
 } from 'ant-design-vue';
 
-import { ACCOUNT_LIMIT_MODE_LABELS } from '../account/shared';
 import {
-  COLLECT_RULE_LABELS,
-  INTERCEPT_MODE_LABELS,
-  toOptions,
-} from '../shared';
+  getCardTypeList,
+  getCountryOptions,
+  getCurrencyOptions,
+} from '#/api/basic-config';
+
+import { ACCOUNT_LIMIT_MODE_LABELS } from '../account/shared';
+import { CARD_BRAND_LABELS, COLLECT_RULE_LABELS, toOptions } from '../shared';
 import {
   getGroupAccounts,
   mockChannelGroupList,
   money,
+  nextGroupIdValue,
   nowText,
   PAYMENT_METHOD_FILTER_OPTIONS,
   remarkText,
@@ -49,13 +54,27 @@ const applied = reactive({
   code: '',
 });
 
-const editForm = reactive({
+const groupForm = reactive({
   name: '',
-  collectRule: 'random',
+  code: '',
   oldCustomerDays: 30,
   payFrequencyDays: 1,
-  failLimitCount: 3,
-  successLimitCount: 1,
+  failLimitCount: 1,
+  successLimitCount: 3,
+  interceptMode: 'reset',
+  interceptCurrency: 'USD',
+  interceptMax: 0,
+  interceptMin: 0,
+  dailyOrderLimit: 0,
+  dailyAmountLimit: 0,
+  preferCountries: [] as string[],
+  disableCountries: [] as string[],
+  disableCardBrands: [] as string[],
+  disableCardTypes: [] as string[],
+  allowCountries: [] as string[],
+  allowCardTypes: [] as string[],
+  collectRule: 'round',
+  autoShip: true,
 });
 
 const accountSearchForm = reactive({
@@ -68,13 +87,23 @@ const accountApplied = reactive({
 
 const loading = ref(false);
 const saving = ref(false);
-const editOpen = ref(false);
+const formOpen = ref(false);
 const accountOpen = ref(false);
 const editingId = ref<null | number>(null);
 const viewingGroupId = ref<null | number>(null);
 const viewingGroupName = ref('');
 
+const currencyOptions = ref<{ label: string; value: string }[]>([]);
+const countryOptions = ref<{ label: string; value: string }[]>([]);
+const cardTypeOptions = ref<{ label: string; value: string }[]>([]);
+
 const collectRuleOptions = toOptions(COLLECT_RULE_LABELS);
+const amountLimitModeOptions = Object.entries(ACCOUNT_LIMIT_MODE_LABELS).map(
+  ([value, label]) => ({ label, value }),
+);
+
+const formTitle = computed(() => (editingId.value ? '编辑' : '新增'));
+const isEditing = computed(() => editingId.value !== null);
 
 const columns = [
   {
@@ -144,6 +173,26 @@ const filteredAccounts = computed(() => {
   });
 });
 
+async function loadConfigOptions() {
+  try {
+    const [currencies, countries, cardTypes] = await Promise.all([
+      getCurrencyOptions(),
+      getCountryOptions(),
+      getCardTypeList(),
+    ]);
+    currencyOptions.value = currencies;
+    countryOptions.value = countries;
+    cardTypeOptions.value = cardTypes.map((item) => ({
+      value: item.code,
+      label: `${item.nameLabel || item.name}（${item.code}）`,
+    }));
+  } catch {
+    currencyOptions.value = [];
+    countryOptions.value = [];
+    cardTypeOptions.value = [];
+  }
+}
+
 function handleSearch() {
   applied.id = searchForm.id;
   applied.code = searchForm.code;
@@ -163,46 +212,129 @@ function handleRefresh() {
   }, 200);
 }
 
+function resetGroupForm() {
+  groupForm.name = '';
+  groupForm.code = '';
+  groupForm.oldCustomerDays = 30;
+  groupForm.payFrequencyDays = 1;
+  groupForm.failLimitCount = 1;
+  groupForm.successLimitCount = 3;
+  groupForm.interceptMode = 'reset';
+  groupForm.interceptCurrency = currencyOptions.value[0]?.value || 'USD';
+  groupForm.interceptMax = 0;
+  groupForm.interceptMin = 0;
+  groupForm.dailyOrderLimit = 0;
+  groupForm.dailyAmountLimit = 0;
+  groupForm.preferCountries = [];
+  groupForm.disableCountries = [];
+  groupForm.disableCardBrands = [];
+  groupForm.disableCardTypes = [];
+  groupForm.allowCountries = [];
+  groupForm.allowCardTypes = [];
+  groupForm.collectRule = 'round';
+  groupForm.autoShip = true;
+}
+
+function fillGroupForm(row: ChannelGroupRow) {
+  groupForm.name = row.name;
+  groupForm.code = row.code;
+  groupForm.oldCustomerDays = row.oldCustomerDays;
+  groupForm.payFrequencyDays = row.payFrequencyDays;
+  groupForm.failLimitCount = row.failLimitCount;
+  groupForm.successLimitCount = row.successLimitCount;
+  groupForm.interceptMode = row.interceptMode;
+  groupForm.interceptCurrency = row.interceptCurrency;
+  groupForm.interceptMax = row.interceptMax;
+  groupForm.interceptMin = row.interceptMin;
+  groupForm.dailyOrderLimit = row.dailyOrderLimit;
+  groupForm.dailyAmountLimit = row.dailyAmountLimit;
+  groupForm.preferCountries = [...row.preferCountries];
+  groupForm.disableCountries = [...row.disableCountries];
+  groupForm.disableCardBrands = [...row.disableCardBrands];
+  groupForm.disableCardTypes = [...row.disableCardTypes];
+  groupForm.allowCountries = [...row.allowCountries];
+  groupForm.allowCardTypes = [...row.allowCardTypes];
+  groupForm.collectRule = row.collectRule;
+  groupForm.autoShip = row.autoShip;
+}
+
+function buildFormPayload() {
+  return {
+    name: groupForm.name.trim(),
+    code: groupForm.code.trim(),
+    oldCustomerDays: groupForm.oldCustomerDays,
+    payFrequencyDays: groupForm.payFrequencyDays,
+    failLimitCount: groupForm.failLimitCount,
+    successLimitCount: groupForm.successLimitCount,
+    interceptMode: groupForm.interceptMode,
+    interceptCurrency: groupForm.interceptCurrency,
+    interceptMax: groupForm.interceptMax,
+    interceptMin: groupForm.interceptMin,
+    dailyOrderLimit: groupForm.dailyOrderLimit,
+    dailyAmountLimit: groupForm.dailyAmountLimit,
+    preferCountries: [...groupForm.preferCountries],
+    disableCountries: [...groupForm.disableCountries],
+    disableCardBrands: [...groupForm.disableCardBrands],
+    disableCardTypes: [...groupForm.disableCardTypes],
+    allowCountries: [...groupForm.allowCountries],
+    allowCardTypes: [...groupForm.allowCardTypes],
+    collectRule: groupForm.collectRule,
+    autoShip: groupForm.autoShip,
+  };
+}
+
 function openCreate() {
-  message.info('新增暂未开放（静态页）');
+  editingId.value = null;
+  resetGroupForm();
+  formOpen.value = true;
 }
 
 function openEdit(row: ChannelGroupRow) {
   editingId.value = row.id;
-  editForm.name = row.name;
-  editForm.collectRule = row.collectRule;
-  editForm.oldCustomerDays = row.oldCustomerDays;
-  editForm.payFrequencyDays = row.payFrequencyDays;
-  editForm.failLimitCount = row.failLimitCount;
-  editForm.successLimitCount = row.successLimitCount;
-  editOpen.value = true;
+  fillGroupForm(row);
+  formOpen.value = true;
 }
 
-function handleEditSave() {
-  if (!editForm.name.trim()) {
-    message.warning('请填写分组名');
-    return;
-  }
-  const row = mockChannelGroupList.value.find(
-    (item) => item.id === editingId.value,
-  );
-  if (!row) {
-    message.warning('分组不存在');
+function handleFormSave() {
+  if (!groupForm.name.trim() || !groupForm.code.trim()) {
+    message.warning('请填写分组名和分组CODE');
     return;
   }
   saving.value = true;
-  Object.assign(row, {
-    name: editForm.name.trim(),
-    collectRule: editForm.collectRule,
-    oldCustomerDays: editForm.oldCustomerDays,
-    payFrequencyDays: editForm.payFrequencyDays,
-    failLimitCount: editForm.failLimitCount,
-    successLimitCount: editForm.successLimitCount,
-    updatedAt: nowText(),
-    updatedBy: 'admin',
-  });
+  const timestamp = nowText();
+  const payload = buildFormPayload();
+  if (editingId.value) {
+    const row = mockChannelGroupList.value.find(
+      (item) => item.id === editingId.value,
+    );
+    if (!row) {
+      message.warning('分组不存在');
+      saving.value = false;
+      return;
+    }
+    const { name: _name, code: _code, ...editablePayload } = payload;
+    Object.assign(row, editablePayload, {
+      updatedAt: timestamp,
+      updatedBy: 'admin',
+    });
+  } else {
+    mockChannelGroupList.value.unshift({
+      id: nextGroupIdValue(),
+      ...payload,
+      totalAmount: 0,
+      balance: 0,
+      dailyRecvCount: 0,
+      dailyRecvAmount: 0,
+      availableAccountCount: 0,
+      gateway: true,
+      createdAt: timestamp,
+      createdBy: 'admin',
+      updatedAt: timestamp,
+      updatedBy: 'admin',
+    });
+  }
   saving.value = false;
-  editOpen.value = false;
+  formOpen.value = false;
   message.success('已保存（静态，未接后端）');
 }
 
@@ -222,6 +354,10 @@ function resetAccountSearch() {
   accountSearchForm.paymentMethod = '';
   accountApplied.paymentMethod = '';
 }
+
+onMounted(() => {
+  void loadConfigOptions();
+});
 </script>
 
 <template>
@@ -353,7 +489,6 @@ function resetAccountSearch() {
                 <span class="text-red-500">
                   {{
                     ACCOUNT_LIMIT_MODE_LABELS[record.interceptMode] ||
-                    INTERCEPT_MODE_LABELS[record.interceptMode] ||
                     record.interceptMode
                   }}
                 </span>
@@ -390,59 +525,192 @@ function resetAccountSearch() {
     </Card>
 
     <Modal
-      v-model:open="editOpen"
+      v-model:open="formOpen"
+      :body-style="{ maxHeight: '70vh', overflowY: 'auto' }"
       :confirm-loading="saving"
       :footer="null"
       destroy-on-close
-      title="编辑"
-      width="480px"
+      :title="formTitle"
+      width="520px"
     >
       <Form layout="vertical" class="pt-2">
         <FormItem label="分组名" required>
-          <Input v-model:value="editForm.name" placeholder="请输入分组名" />
+          <Input
+            v-model:value="groupForm.name"
+            :disabled="isEditing"
+            placeholder="请输入分组名"
+          />
         </FormItem>
-        <FormItem label="收款规则">
-          <Select
-            v-model:value="editForm.collectRule"
-            :options="collectRuleOptions"
-            allow-clear
-            placeholder="请选择收款规则"
+        <FormItem label="分组CODE" required>
+          <Input
+            v-model:value="groupForm.code"
+            :disabled="isEditing"
+            placeholder="请输入分组CODE"
           />
         </FormItem>
         <FormItem label="老客户判断时间">
           <InputNumber
-            v-model:value="editForm.oldCustomerDays"
+            v-model:value="groupForm.oldCustomerDays"
             :min="0"
             class="w-full"
           />
         </FormItem>
         <FormItem label="支付频率时间(day)">
           <InputNumber
-            v-model:value="editForm.payFrequencyDays"
+            v-model:value="groupForm.payFrequencyDays"
             :min="0"
             class="w-full"
           />
         </FormItem>
         <FormItem label="失败限制次数">
           <InputNumber
-            v-model:value="editForm.failLimitCount"
+            v-model:value="groupForm.failLimitCount"
             :min="0"
             class="w-full"
           />
         </FormItem>
         <FormItem label="成功限制次数">
           <InputNumber
-            v-model:value="editForm.successLimitCount"
+            v-model:value="groupForm.successLimitCount"
             :min="0"
             class="w-full"
           />
         </FormItem>
+        <FormItem label="金额限制模式">
+          <Select
+            v-model:value="groupForm.interceptMode"
+            :options="amountLimitModeOptions"
+            placeholder="请选择"
+          />
+          <div class="text-muted-foreground mt-1 text-xs">
+            重置：超过120只收120,拦截：超过120不收
+          </div>
+        </FormItem>
+        <FormItem label="计算货币">
+          <Select
+            v-model:value="groupForm.interceptCurrency"
+            :options="currencyOptions"
+            option-filter-prop="label"
+            placeholder="请选择计算货币"
+            show-search
+          />
+          <div class="text-muted-foreground mt-1 text-xs">限制金额时使用</div>
+        </FormItem>
+        <FormItem label="限制最大金额">
+          <InputNumber
+            v-model:value="groupForm.interceptMax"
+            :min="0"
+            :precision="2"
+            class="w-full"
+          />
+        </FormItem>
+        <FormItem label="限制最小金额">
+          <InputNumber
+            v-model:value="groupForm.interceptMin"
+            :min="0"
+            :precision="2"
+            class="w-full"
+          />
+        </FormItem>
+        <FormItem label="日限单数">
+          <InputNumber
+            v-model:value="groupForm.dailyOrderLimit"
+            :min="0"
+            class="w-full"
+          />
+        </FormItem>
+        <FormItem label="日限金额(USD)">
+          <InputNumber
+            v-model:value="groupForm.dailyAmountLimit"
+            :min="0"
+            :precision="2"
+            class="w-full"
+          />
+        </FormItem>
+        <FormItem label="优先国家">
+          <Select
+            v-model:value="groupForm.preferCountries"
+            :options="countryOptions"
+            allow-clear
+            mode="multiple"
+            option-filter-prop="label"
+            placeholder="请选择优先国家"
+            show-search
+          />
+        </FormItem>
+        <FormItem label="禁用国家">
+          <Select
+            v-model:value="groupForm.disableCountries"
+            :options="countryOptions"
+            allow-clear
+            mode="multiple"
+            option-filter-prop="label"
+            placeholder="请选择禁用国家"
+            show-search
+          />
+        </FormItem>
+        <FormItem label="禁用卡头">
+          <Select
+            v-model:value="groupForm.disableCardBrands"
+            :options="toOptions(CARD_BRAND_LABELS)"
+            allow-clear
+            disabled
+            mode="multiple"
+            placeholder="暂未开放"
+          />
+        </FormItem>
+        <FormItem label="禁用卡类型">
+          <Select
+            v-model:value="groupForm.disableCardTypes"
+            :options="cardTypeOptions"
+            allow-clear
+            mode="multiple"
+            option-filter-prop="label"
+            placeholder="请选择一项或多项"
+            show-search
+          />
+        </FormItem>
+        <FormItem label="仅支持国家">
+          <Select
+            v-model:value="groupForm.allowCountries"
+            :options="countryOptions"
+            allow-clear
+            mode="multiple"
+            option-filter-prop="label"
+            placeholder="请选择仅支持国家"
+            show-search
+          />
+        </FormItem>
+        <FormItem label="仅支持卡类型">
+          <Select
+            v-model:value="groupForm.allowCardTypes"
+            :options="cardTypeOptions"
+            allow-clear
+            mode="multiple"
+            option-filter-prop="label"
+            placeholder="请选择一项或多项"
+            show-search
+          />
+        </FormItem>
+        <FormItem label="收款规则">
+          <Select
+            v-model:value="groupForm.collectRule"
+            :options="collectRuleOptions"
+            placeholder="请选择收款规则"
+          />
+        </FormItem>
+        <FormItem label="发货模式">
+          <RadioGroup v-model:value="groupForm.autoShip">
+            <Radio :value="true">自动发货</Radio>
+            <Radio :value="false">手动发货</Radio>
+          </RadioGroup>
+        </FormItem>
         <FormItem>
           <Space>
-            <Button :loading="saving" type="primary" @click="handleEditSave">
+            <Button :loading="saving" type="primary" @click="handleFormSave">
               提交
             </Button>
-            <Button @click="editOpen = false">关闭</Button>
+            <Button @click="formOpen = false">关闭</Button>
           </Space>
         </FormItem>
       </Form>
