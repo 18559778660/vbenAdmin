@@ -116,7 +116,7 @@ const routes: RouteRecordRaw[] = [
       {
         name: 'ChannelAssign',
         path: 'assign',
-        component: Placeholder,
+        component: () => import('#/views/channel/assign/index.vue'),
         meta: {
           icon: 'lucide:share-2',
           title: $t('page.channel.assign'),
