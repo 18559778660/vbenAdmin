@@ -324,7 +324,7 @@ const routes: RouteRecordRaw[] = [
       {
         name: 'SiteAManage',
         path: 'site-a',
-        component: Placeholder,
+        component: () => import('#/views/site/site-a/index.vue'),
         meta: {
           icon: 'lucide:monitor',
           title: $t('page.site.siteA'),
@@ -333,7 +333,7 @@ const routes: RouteRecordRaw[] = [
       {
         name: 'SiteBManage',
         path: 'site-b',
-        component: Placeholder,
+        component: () => import('#/views/site/site-b/index.vue'),
         meta: {
           icon: 'lucide:monitor-smartphone',
           title: $t('page.site.siteB'),
@@ -342,7 +342,7 @@ const routes: RouteRecordRaw[] = [
       {
         name: 'StripeWordBank',
         path: 'stripe-wordbank',
-        component: Placeholder,
+        component: () => import('#/views/site/stripe-wordbank/index.vue'),
         meta: {
           icon: 'lucide:book-text',
           title: $t('page.site.stripeWordBank'),
