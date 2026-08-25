@@ -23,7 +23,7 @@ export type ChannelRow = {
   disableCountries: string[];
   failAutoClose: number;
   failCount: number;
-  gateway: boolean;
+  gatewayUrl: string;
   id: number;
   interceptCurrency: string;
   interceptMax: number;
@@ -39,7 +39,6 @@ export type ChannelRow = {
   payFrequency: number;
   paymentMode: string;
   payParams: string;
-  platform: string;
   preferCountries: string[];
   productInfo: string;
   remark: string;
@@ -58,16 +57,25 @@ export type ChannelRow = {
   updatedBy: string;
 };
 
-export const PLATFORM_LABELS: Record<string, string> = {
-  antom: 'Antom',
-  stripe: 'Stripe',
-  paypal: 'PayPal',
+export const PAYMENT_MODE_LABELS: Record<string, string> = {
+  local: '本地支付',
+  checkout: '收银台',
+  embedded: '系统内嵌',
+  direct: '收银台',
 };
 
-export const PAYMENT_MODE_LABELS: Record<string, string> = {
-  direct: '直连支付',
-  local: '本地支付',
+export const PAYMENT_MODE_COLORS: Record<string, string> = {
+  local: 'text-orange-500',
+  embedded: 'text-cyan-600',
+  checkout: 'text-primary',
+  direct: 'text-primary',
 };
+
+export const PAYMENT_MODE_OPTIONS = [
+  { label: '本地支付', value: 'local' },
+  { label: '收银台', value: 'checkout' },
+  { label: '系统内嵌', value: 'embedded' },
+];
 
 export const INTERCEPT_MODE_LABELS: Record<string, string> = {
   reset: '重置',
@@ -119,20 +127,46 @@ export const MIXER_OPTIONS = [
   { label: '账号池C', value: 'pool-c' },
 ];
 
-export const platformFilterOptions = [
-  { label: '全部', value: '' },
-  ...Object.entries(PLATFORM_LABELS).map(([value, label]) => ({
-    label,
-    value,
-  })),
-];
-
 export function toOptions(map: Record<string, string>) {
   return Object.entries(map).map(([value, label]) => ({ label, value }));
 }
 
 export function money(value: number) {
   return value.toFixed(2);
+}
+
+export function validateInterceptRange(min: number, max: number) {
+  if (min > max) {
+    return '限制最小金额不能高于限制最大金额';
+  }
+  return null;
+}
+
+export function resolveSuccessMode(
+  payFrequency: number,
+  successCount: number,
+  failCount: number,
+) {
+  if (payFrequency > 0 && (successCount > 0 || failCount > 0)) {
+    return 'limited';
+  }
+  return 'unlimited';
+}
+
+export function validateSuccessSetting(
+  payFrequency: number,
+  successCount: number,
+  failCount: number,
+) {
+  const hasFrequency = payFrequency > 0;
+  const hasCount = successCount > 0 || failCount > 0;
+  if (hasFrequency && !hasCount) {
+    return '成功设置需同时配置成功次数或失败次数';
+  }
+  if (hasCount && !hasFrequency) {
+    return '成功设置需同时配置支付频率';
+  }
+  return null;
 }
 
 export function nowText() {
@@ -145,7 +179,6 @@ function baseRow(
   partial: Partial<ChannelRow> & Pick<ChannelRow, 'id' | 'name'>,
 ): ChannelRow {
   return {
-    platform: 'antom',
     packageName: '',
     totalAmount: 0,
     balance: 0,
@@ -159,7 +192,7 @@ function baseRow(
     interceptMin: 0,
     status: true,
     paymentMode: 'local',
-    gateway: true,
+    gatewayUrl: '',
     successMode: 'unlimited',
     countries: [],
     currencies: [],
@@ -206,10 +239,9 @@ export const mockChannelList = ref<ChannelRow[]>([
   baseRow({
     id: 53,
     name: 'antom',
-    platform: 'antom',
     packageName: 'antom.zip',
     paymentMode: 'local',
-    gateway: true,
+    gatewayUrl: '',
     remark: '2026/06/18 重新更新压缩包',
     channelCode: 'antom',
     payCode: 'antom',
@@ -230,7 +262,6 @@ export const mockChannelList = ref<ChannelRow[]>([
   baseRow({
     id: 12,
     name: 'stripe-us',
-    platform: 'stripe',
     packageName: 'stripe-us.zip',
     totalAmount: 12_800,
     balance: 3560,
@@ -241,7 +272,7 @@ export const mockChannelList = ref<ChannelRow[]>([
     interceptMode: 'keep',
     interceptMax: 2000,
     interceptMin: 10,
-    paymentMode: 'direct',
+    paymentMode: 'checkout',
     successMode: 'limited',
     countries: ['US', 'GB'],
     currencies: ['USD', 'EUR'],
@@ -257,10 +288,9 @@ export const mockChannelList = ref<ChannelRow[]>([
   baseRow({
     id: 8,
     name: 'paypal-eu',
-    platform: 'paypal',
     status: false,
-    paymentMode: 'direct',
-    gateway: false,
+    paymentMode: 'checkout',
+    gatewayUrl: '',
     interceptCurrency: 'EUR',
     countries: ['GB'],
     currencies: ['EUR'],

@@ -30,26 +30,31 @@ import {
   getCountryOptions,
   getCurrencyOptions,
 } from '#/api/basic-config';
+import {
+  createChannel,
+  getChannelList,
+  setChannelStatus,
+  updateChannel,
+  updateChannelLimits,
+} from '#/api/channel';
 
 import {
   AMOUNT_LIMIT_MODE_LABELS,
   CARD_BRAND_LABELS,
   COLLECT_RULE_LABELS,
-  createChannel,
-  getChannelById,
   INTERCEPT_MODE_LABELS,
   MIXER_OPTIONS,
-  mockChannelList,
   money,
-  nowText,
   ORDER_NO_MODE_LABELS,
+  PAYMENT_MODE_COLORS,
   PAYMENT_MODE_LABELS,
-  platformFilterOptions,
+  PAYMENT_MODE_OPTIONS,
   PRODUCT_INFO_LABELS,
   RETURN_VERIFY_LABELS,
   SUCCESS_MODE_LABELS,
   toOptions,
-  updateChannel,
+  validateInterceptRange,
+  validateSuccessSetting,
 } from '../shared';
 
 defineOptions({ name: 'ChannelList' });
@@ -57,16 +62,16 @@ defineOptions({ name: 'ChannelList' });
 const searchForm = reactive({
   id: undefined as number | undefined,
   name: '',
-  platform: '',
 });
 
 const applied = reactive({
   id: undefined as number | undefined,
   name: '',
-  platform: '',
 });
 
 const loading = ref(false);
+const list = ref<ChannelRow[]>([]);
+const channelNameOptions = ref<{ label: string; value: string }[]>([]);
 const modalOpen = ref(false);
 const infoOpen = ref(false);
 const editOpen = ref(false);
@@ -153,7 +158,7 @@ const columns = [
   { title: '拦截设置', key: 'intercept', width: 200 },
   { title: '状态', key: 'status', width: 80 },
   { title: '支付模式', key: 'paymentMode', width: 110 },
-  { title: '网关', key: 'gateway', width: 80 },
+  { title: '网关', key: 'gateway', width: 120 },
   { title: '成功设置', key: 'successMode', width: 100 },
   { title: '限制国家', key: 'countries', width: 140 },
   { title: '支付货币', key: 'currencies', width: 140 },
@@ -199,40 +204,66 @@ function countryLabel(code: string) {
   );
 }
 
-const list = computed(() => {
-  return mockChannelList.value.filter((row) => {
-    if (applied.id !== undefined && row.id !== applied.id) {
-      return false;
-    }
-    if (applied.name && !row.name.includes(applied.name)) {
-      return false;
-    }
-    if (applied.platform && row.platform !== applied.platform) {
-      return false;
-    }
-    return true;
-  });
-});
+const listData = computed(() => list.value);
+
+function buildListParams() {
+  const params: {
+    id?: number;
+    name?: string;
+  } = {};
+  if (applied.id !== undefined) {
+    params.id = applied.id;
+  }
+  if (applied.name) {
+    params.name = applied.name;
+  }
+  return params;
+}
+
+async function loadChannelNameOptions() {
+  try {
+    const rows = await getChannelList();
+    const names = [
+      ...new Set(rows.map((row) => row.name.trim()).filter(Boolean)),
+    ].toSorted();
+    channelNameOptions.value = names.map((name) => ({
+      label: name,
+      value: name,
+    }));
+  } catch {
+    channelNameOptions.value = [];
+  }
+}
+
+async function loadList() {
+  loading.value = true;
+  try {
+    list.value = await getChannelList(buildListParams());
+  } finally {
+    loading.value = false;
+  }
+}
+
+async function refreshPage() {
+  await Promise.all([loadList(), loadChannelNameOptions()]);
+}
 
 function handleSearch() {
   applied.id = searchForm.id;
   applied.name = searchForm.name.trim();
-  applied.platform = searchForm.platform;
+  void loadList();
 }
 
 function resetSearch() {
   searchForm.id = undefined;
   searchForm.name = '';
-  searchForm.platform = '';
   handleSearch();
 }
 
 function handleRefresh() {
-  loading.value = true;
-  window.setTimeout(() => {
-    loading.value = false;
-    message.success('已刷新（静态数据）');
-  }, 300);
+  void refreshPage().then(() => {
+    message.success('已刷新');
+  });
 }
 
 function resetForm() {
@@ -306,76 +337,37 @@ function onLimit(row: ChannelRow) {
   editOpen.value = true;
 }
 
-function handleSave() {
+async function handleSave() {
   const name = form.name.trim();
   if (!name) {
     message.warning('请输入通道名');
     return;
   }
   saving.value = true;
-  const payload = {
-    name,
-    paymentMode: form.paymentMode,
-    siteBGroup: form.siteBGroup.trim(),
-    orderNoMode: form.orderNoMode,
-    settleRate: form.settleRate,
-    payParams: form.payParams,
-    productInfo: form.productInfo,
-    channelCode: form.channelCode.trim(),
-    payCode: form.payCode.trim(),
-    returnVerify: form.returnVerify,
-    oldCustomerDays: form.oldCustomerDays,
-    returnIpWhitelist: form.returnIpWhitelist,
-  };
-  if (editingId.value === null) {
-    createChannel({
-      platform: 'antom',
-      packageName: '',
-      totalAmount: 0,
-      balance: 0,
-      dailyOrderLimit: 0,
-      dailyAmountLimit: 0,
-      dailyRecvCount: 0,
-      dailyRecvAmount: 0,
-      interceptMode: 'reset',
-      interceptCurrency: 'USD',
-      interceptMax: 0,
-      interceptMin: 0,
-      status: true,
-      gateway: true,
-      successMode: 'unlimited',
-      countries: [],
-      currencies: [],
-      remark: '',
-      payFrequency: 0,
-      failCount: 0,
-      successCount: 0,
-      failAutoClose: 0,
-      mutualHoldAmount: 0,
-      amountLimitMode: 'single',
-      calcCurrency: 'USD',
-      allowCountries: [],
-      preferCountries: [],
-      disableCountries: [],
-      allowCardTypes: [],
-      disableCardTypes: [],
-      disableCardBrands: [],
-      mixers: [],
-      collectRule: 'random',
-      shipRange: '40-50',
-      sort: 1,
-      autoShip: true,
-      returnKeywords: '',
-      disableBrandWords: '',
-      ...payload,
+  try {
+    await createChannel({
+      name,
+      paymentMode: form.paymentMode,
+      siteBGroup: form.siteBGroup.trim(),
+      orderNoMode: form.orderNoMode,
+      settleRate: form.settleRate,
+      payParams: form.payParams,
+      productInfo: form.productInfo,
+      channelCode: form.channelCode.trim(),
+      payCode: form.payCode.trim(),
+      returnVerify: form.returnVerify,
+      oldCustomerDays: form.oldCustomerDays,
+      returnIpWhitelist: form.returnIpWhitelist,
     });
-    message.success('已新增（静态，未接后端）');
+    modalOpen.value = false;
+    message.success('已新增');
+    await refreshPage();
+  } finally {
+    saving.value = false;
   }
-  saving.value = false;
-  modalOpen.value = false;
 }
 
-function handleInfoSave() {
+async function handleInfoSave() {
   const name = infoForm.name.trim();
   if (!name) {
     message.warning('请输入通道名');
@@ -384,91 +376,126 @@ function handleInfoSave() {
   if (editingId.value === null) {
     return;
   }
-  const current = getChannelById(editingId.value);
-  if (!current) {
-    message.warning('通道不存在');
-    return;
-  }
   saving.value = true;
-  updateChannel(editingId.value, {
-    name,
-    payCode: infoForm.payCode.trim(),
-    paymentMode: infoForm.paymentMode,
-    mixers: [...infoForm.mixers],
-    settleRate: infoForm.settleRate,
-    remark: infoForm.remark.trim(),
-    returnIpWhitelist: infoForm.returnIpWhitelist,
-    disableBrandWords: infoForm.disableBrandWords,
-    collectRule: infoForm.collectRule,
-    shipRange: infoForm.shipRange.trim() || '40-50',
-    orderNoMode: infoForm.orderNoMode,
-    sort: infoForm.sort,
-    productInfo: infoForm.productInfo,
-    returnVerify: infoForm.returnVerify,
-    oldCustomerDays: infoForm.oldCustomerDays,
-    autoShip: infoForm.autoShip,
-    returnKeywords: infoForm.returnKeywords,
-  });
-  saving.value = false;
-  infoOpen.value = false;
-  message.success('已保存（静态，未接后端）');
+  try {
+    await updateChannel(editingId.value, {
+      name,
+      payCode: infoForm.payCode.trim(),
+      paymentMode: infoForm.paymentMode,
+      mixers: [...infoForm.mixers],
+      settleRate: infoForm.settleRate,
+      remark: infoForm.remark.trim(),
+      returnIpWhitelist: infoForm.returnIpWhitelist,
+      disableBrandWords: infoForm.disableBrandWords,
+      collectRule: infoForm.collectRule,
+      shipRange: infoForm.shipRange.trim() || '40-50',
+      orderNoMode: infoForm.orderNoMode,
+      sort: infoForm.sort,
+      productInfo: infoForm.productInfo,
+      returnVerify: infoForm.returnVerify,
+      oldCustomerDays: infoForm.oldCustomerDays,
+      autoShip: infoForm.autoShip,
+      returnKeywords: infoForm.returnKeywords,
+    });
+    infoOpen.value = false;
+    message.success('已保存');
+    await refreshPage();
+  } finally {
+    saving.value = false;
+  }
 }
 
-function handleEditSave() {
+async function copyGatewayUrl(url: string) {
+  if (!url) {
+    return;
+  }
+  try {
+    await navigator.clipboard.writeText(url);
+    message.success('网关地址已复制');
+  } catch {
+    message.error('复制失败，请手动复制');
+  }
+}
+
+async function handleEditSave() {
   if (editingId.value === null) {
     return;
   }
-  const current = getChannelById(editingId.value);
-  if (!current) {
-    message.warning('通道不存在');
+  const rangeError = validateInterceptRange(
+    editForm.interceptMin,
+    editForm.interceptMax,
+  );
+  if (rangeError) {
+    message.warning(rangeError);
+    return;
+  }
+  const successSettingError = validateSuccessSetting(
+    editForm.payFrequency,
+    editForm.successCount,
+    editForm.failCount,
+  );
+  if (successSettingError) {
+    message.warning(successSettingError);
     return;
   }
   saving.value = true;
-  updateChannel(editingId.value, {
-    channelCode: editForm.channelCode.trim(),
-    dailyAmountLimit: editForm.dailyAmountLimit,
-    payFrequency: editForm.payFrequency,
-    failCount: editForm.failCount,
-    amountLimitMode: editForm.amountLimitMode,
-    interceptMax: editForm.interceptMax,
-    currencies: [...editForm.currencies],
-    allowCountries: [...editForm.allowCountries],
-    countries: [...editForm.allowCountries],
-    allowCardTypes: [...editForm.allowCardTypes],
-    disableCardBrands: [...editForm.disableCardBrands],
-    dailyOrderLimit: editForm.dailyOrderLimit,
-    mutualHoldAmount: editForm.mutualHoldAmount,
-    successCount: editForm.successCount,
-    failAutoClose: editForm.failAutoClose,
-    calcCurrency: editForm.calcCurrency,
-    interceptMin: editForm.interceptMin,
-    interceptCurrency: editForm.calcCurrency,
-    preferCountries: [...editForm.preferCountries],
-    disableCountries: [...editForm.disableCountries],
-    disableCardTypes: [...editForm.disableCardTypes],
-  });
-  saving.value = false;
-  editOpen.value = false;
-  message.success('已保存（静态，未接后端）');
+  try {
+    await updateChannelLimits(editingId.value, {
+      channelCode: editForm.channelCode.trim(),
+      dailyAmountLimit: editForm.dailyAmountLimit,
+      payFrequency: editForm.payFrequency,
+      failCount: editForm.failCount,
+      amountLimitMode: editForm.amountLimitMode,
+      interceptMax: editForm.interceptMax,
+      currencies: [...editForm.currencies],
+      allowCountries: [...editForm.allowCountries],
+      allowCardTypes: [...editForm.allowCardTypes],
+      disableCardBrands: [...editForm.disableCardBrands],
+      dailyOrderLimit: editForm.dailyOrderLimit,
+      mutualHoldAmount: editForm.mutualHoldAmount,
+      successCount: editForm.successCount,
+      failAutoClose: editForm.failAutoClose,
+      calcCurrency: editForm.calcCurrency,
+      interceptMin: editForm.interceptMin,
+      preferCountries: [...editForm.preferCountries],
+      disableCountries: [...editForm.disableCountries],
+      disableCardTypes: [...editForm.disableCardTypes],
+    });
+    editOpen.value = false;
+    message.success('已保存');
+    await refreshPage();
+  } finally {
+    saving.value = false;
+  }
 }
 
 function onLog(row: ChannelRow) {
   message.info(`上传压缩包功能暂未接入：${row.name}`);
 }
 
-function onToggleStatus(row: ChannelRow, checked: boolean | number | string) {
-  row.status = Boolean(checked);
-  row.updatedBy = 'admin';
-  row.updatedAt = nowText();
+async function onToggleStatus(
+  row: ChannelRow,
+  checked: boolean | number | string,
+) {
+  const status = Boolean(checked);
+  try {
+    await setChannelStatus(row.id, status);
+    row.status = status;
+    message.success(status ? '已启用' : '已禁用');
+    await refreshPage();
+  } catch {
+    await refreshPage();
+  }
 }
 
 onMounted(() => {
   void loadConfigOptions();
+  void refreshPage();
 });
 </script>
 
 <template>
-  <Page auto-content-height description="当前为静态预览，数据未接后端">
+  <Page auto-content-height>
     <Card class="mb-4" :bordered="false">
       <Form layout="inline" class="gap-y-3">
         <FormItem label="ID">
@@ -481,19 +508,13 @@ onMounted(() => {
           />
         </FormItem>
         <FormItem label="通道名称">
-          <Input
+          <Select
             v-model:value="searchForm.name"
+            :options="channelNameOptions"
             allow-clear
             class="w-44"
             placeholder="通道名称"
-          />
-        </FormItem>
-        <FormItem label="通道平台">
-          <Select
-            v-model:value="searchForm.platform"
-            :options="platformFilterOptions"
-            class="w-40"
-            placeholder="通道平台"
+            show-search
           />
         </FormItem>
         <FormItem>
@@ -535,7 +556,7 @@ onMounted(() => {
 
       <Table
         :columns="columns"
-        :data-source="list"
+        :data-source="listData"
         :loading="loading"
         :pagination="{ pageSize: 10, showSizeChanger: true }"
         :scroll="{ x: 2400 }"
@@ -627,18 +648,38 @@ onMounted(() => {
             />
           </template>
           <template v-else-if="column.key === 'paymentMode'">
-            <span class="text-orange-500">
+            <span
+              :class="
+                PAYMENT_MODE_COLORS[record.paymentMode] || 'text-orange-500'
+              "
+            >
               {{
                 PAYMENT_MODE_LABELS[record.paymentMode] || record.paymentMode
               }}
             </span>
           </template>
           <template v-else-if="column.key === 'gateway'">
-            <Tag v-if="record.gateway">网关</Tag>
+            <Tooltip v-if="record.gatewayUrl" :title="record.gatewayUrl">
+              <Button
+                class="px-0"
+                size="small"
+                type="link"
+                @click="copyGatewayUrl(record.gatewayUrl)"
+              >
+                网关
+                <IconifyIcon class="ml-1 size-3.5" icon="lucide:copy" />
+              </Button>
+            </Tooltip>
             <span v-else class="text-muted-foreground">-</span>
           </template>
           <template v-else-if="column.key === 'successMode'">
-            <span class="text-green-600">
+            <span
+              :class="
+                record.successMode === 'limited'
+                  ? 'text-orange-500'
+                  : 'text-green-600'
+              "
+            >
               {{
                 SUCCESS_MODE_LABELS[record.successMode] || record.successMode
               }}
@@ -697,7 +738,7 @@ onMounted(() => {
             <FormItem label="支付模式">
               <Select
                 v-model:value="form.paymentMode"
-                :options="toOptions(PAYMENT_MODE_LABELS)"
+                :options="PAYMENT_MODE_OPTIONS"
                 allow-clear
                 placeholder="请选择支付模式"
               />
@@ -706,10 +747,11 @@ onMounted(() => {
               <Input
                 v-model:value="form.siteBGroup"
                 allow-clear
-                placeholder="请输入B站分组"
+                disabled
+                placeholder="暂未开放"
               />
               <div class="text-muted-foreground mt-1 text-xs">
-                用户通道账号选择B站
+                用户通道账号选择B站（暂未开放）
               </div>
             </FormItem>
             <FormItem label="订单号设置">
@@ -825,7 +867,7 @@ onMounted(() => {
             <FormItem label="支付模式">
               <Select
                 v-model:value="infoForm.paymentMode"
-                :options="toOptions(PAYMENT_MODE_LABELS)"
+                :options="PAYMENT_MODE_OPTIONS"
                 allow-clear
                 placeholder="请选择支付模式"
               />
@@ -983,7 +1025,7 @@ onMounted(() => {
                 class="w-full"
               />
               <div class="text-muted-foreground mt-1 text-xs">
-                某支付方式一天只收一单
+                与成功次数/失败次数配合构成成功设置；三者都未配置则为不限制
               </div>
             </FormItem>
             <FormItem label="失败次数">
@@ -993,7 +1035,7 @@ onMounted(() => {
                 class="w-full"
               />
               <div class="text-muted-foreground mt-1 text-xs">
-                一定时间内该账号连续失败达到 N 次后报失败，不再提交此通道
+                支付频率内连续失败达到 N 次后报失败；需同时填写支付频率
               </div>
             </FormItem>
             <FormItem label="金额限制模式">
@@ -1010,7 +1052,7 @@ onMounted(() => {
             <FormItem label="限制最大金额">
               <InputNumber
                 v-model:value="editForm.interceptMax"
-                :min="0"
+                :min="editForm.interceptMin"
                 :precision="2"
                 class="w-full"
               />
@@ -1085,7 +1127,7 @@ onMounted(() => {
                 class="w-full"
               />
               <div class="text-muted-foreground mt-1 text-xs">
-                一定时间内内部能够成功的笔数
+                支付频率内允许成功的笔数；需同时填写支付频率
               </div>
             </FormItem>
             <FormItem label="失败自动关闭">
@@ -1113,6 +1155,9 @@ onMounted(() => {
             <FormItem label="限制最小金额">
               <InputNumber
                 v-model:value="editForm.interceptMin"
+                :max="
+                  editForm.interceptMax > 0 ? editForm.interceptMax : undefined
+                "
                 :min="0"
                 :precision="2"
                 class="w-full"
