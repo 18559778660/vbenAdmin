@@ -35,6 +35,7 @@ export type ChannelRow = {
   oldCustomerDays: number;
   orderNoMode: string;
   packageName: string;
+  packageUrl: string;
   payCode: string;
   payFrequency: number;
   paymentMode: string;
@@ -180,6 +181,7 @@ function baseRow(
 ): ChannelRow {
   return {
     packageName: '',
+    packageUrl: '',
     totalAmount: 0,
     balance: 0,
     dailyOrderLimit: 0,

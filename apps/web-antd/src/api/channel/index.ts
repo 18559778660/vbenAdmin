@@ -5,6 +5,7 @@ export namespace ChannelApi {
     id: number;
     name: string;
     packageName: string;
+    packageUrl: string;
     totalAmount: number;
     balance: number;
     dailyOrderLimit: number;
@@ -147,4 +148,22 @@ export async function setChannelStatus(id: number, status: boolean) {
   return requestClient.put<ChannelApi.Channel>(`/channels/${id}/status`, {
     status,
   });
+}
+
+export async function uploadChannelPackage(id: number, file: File) {
+  const formData = new FormData();
+  formData.append('file', file, file.name);
+  return requestClient.post<ChannelApi.Channel>(
+    `/channels/${id}/package`,
+    formData,
+    {
+      headers: {
+        'Content-Type': undefined,
+      },
+    },
+  );
+}
+
+export async function downloadChannelPackage(id: number) {
+  return requestClient.download<Blob>(`/channels/${id}/package`);
 }

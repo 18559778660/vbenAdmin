@@ -1,10 +1,11 @@
 <script lang="ts" setup>
 import type { ChannelRow } from '../shared';
 
-import { computed, onMounted, reactive, ref } from 'vue';
+import { computed, onMounted, reactive, ref, useTemplateRef } from 'vue';
 
 import { Page } from '@vben/common-ui';
 import { IconifyIcon } from '@vben/icons';
+import { downloadFileFromBlobPart } from '@vben/utils';
 
 import {
   Button,
@@ -32,10 +33,12 @@ import {
 } from '#/api/basic-config';
 import {
   createChannel,
+  downloadChannelPackage,
   getChannelList,
   setChannelStatus,
   updateChannel,
   updateChannelLimits,
+  uploadChannelPackage,
 } from '#/api/channel';
 
 import {
@@ -76,7 +79,10 @@ const modalOpen = ref(false);
 const infoOpen = ref(false);
 const editOpen = ref(false);
 const saving = ref(false);
+const packageUploading = ref(false);
 const editingId = ref<null | number>(null);
+const packageInputRef = useTemplateRef<HTMLInputElement>('packageInputRef');
+const packageUploadChannelId = ref<null | number>(null);
 
 const form = reactive({
   name: '',
@@ -469,8 +475,44 @@ async function handleEditSave() {
   }
 }
 
-function onLog(row: ChannelRow) {
-  message.info(`上传压缩包功能暂未接入：${row.name}`);
+function onUploadPackage(row: ChannelRow) {
+  packageUploadChannelId.value = row.id;
+  packageInputRef.value?.click();
+}
+
+async function handlePackageFileChange(event: Event) {
+  const input = event.target as HTMLInputElement;
+  const file = input.files?.[0];
+  const channelId = packageUploadChannelId.value;
+  input.value = '';
+  packageUploadChannelId.value = null;
+  if (!file || channelId === null) {
+    return;
+  }
+  packageUploading.value = true;
+  try {
+    await uploadChannelPackage(channelId, file);
+    message.success('压缩包已绑定');
+    await refreshPage();
+  } finally {
+    packageUploading.value = false;
+  }
+}
+
+async function downloadPackage(row: ChannelRow) {
+  if (!row.packageUrl) {
+    message.warning('暂无压缩包');
+    return;
+  }
+  try {
+    const blob = await downloadChannelPackage(row.id);
+    downloadFileFromBlobPart({
+      fileName: row.packageName || `channel-${row.id}.zip`,
+      source: blob,
+    });
+  } catch {
+    message.error('下载失败');
+  }
 }
 
 async function onToggleStatus(
@@ -496,6 +538,13 @@ onMounted(() => {
 
 <template>
   <Page auto-content-height>
+    <input
+      ref="packageInputRef"
+      accept=".zip,.rar,.7z"
+      class="hidden"
+      type="file"
+      @change="handlePackageFileChange"
+    />
     <Card class="mb-4" :bordered="false">
       <Form layout="inline" class="gap-y-3">
         <FormItem label="ID">
@@ -591,7 +640,8 @@ onMounted(() => {
                 <Button
                   size="small"
                   type="link"
-                  @click="onLog(record as ChannelRow)"
+                  @click="onUploadPackage(record as ChannelRow)"
+                  :loading="packageUploading"
                 >
                   <IconifyIcon class="size-4" icon="lucide:file-check" />
                 </Button>
@@ -600,11 +650,13 @@ onMounted(() => {
           </template>
           <template v-else-if="column.key === 'package'">
             <Tooltip v-if="record.packageName" :title="record.packageName">
-              <span
-                class="inline-flex size-8 items-center justify-center rounded border border-orange-300 bg-orange-50 text-orange-500"
+              <button
+                class="inline-flex size-8 cursor-pointer items-center justify-center rounded border border-orange-300 bg-orange-50 text-orange-500 transition hover:bg-orange-100"
+                type="button"
+                @click="downloadPackage(record as ChannelRow)"
               >
                 <IconifyIcon class="size-5" icon="lucide:file-archive" />
-              </span>
+              </button>
             </Tooltip>
             <span v-else class="text-muted-foreground">-</span>
           </template>
