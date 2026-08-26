@@ -1,7 +1,9 @@
 <script lang="ts" setup>
 import type { SiteAStatus } from './shared';
 
-import { computed, reactive, ref } from 'vue';
+import type { SiteAApi } from '#/api';
+
+import { computed, onMounted, reactive, ref } from 'vue';
 
 import { Page } from '@vben/common-ui';
 import { IconifyIcon } from '@vben/icons';
@@ -21,13 +23,15 @@ import {
 } from 'ant-design-vue';
 
 import {
+  batchUpdateSiteAStatus,
+  createSiteA,
+  getMerchantOptions,
+  getSiteAList,
+} from '#/api';
+
+import {
   domainHref,
   FRAMEWORK_OPTIONS,
-  MERCHANT_FORM_OPTIONS,
-  MERCHANT_OPTIONS,
-  mockSiteAList,
-  nextSiteAIdValue,
-  nowText,
   STATUS_COLORS,
   STATUS_FILTER_OPTIONS,
   STATUS_LABELS,
@@ -36,19 +40,13 @@ import {
 defineOptions({ name: 'SiteAList' });
 
 const searchForm = reactive({
-  merchant: '',
-  domain: '',
-  status: '' as '' | SiteAStatus,
-});
-
-const applied = reactive({
-  merchant: '',
+  merchantId: undefined as number | undefined,
   domain: '',
   status: '' as '' | SiteAStatus,
 });
 
 const createForm = reactive({
-  merchant: undefined as string | undefined,
+  merchantId: undefined as number | undefined,
   domain: '',
   framework: undefined as string | undefined,
 });
@@ -57,12 +55,24 @@ const loading = ref(false);
 const saving = ref(false);
 const createOpen = ref(false);
 const selectedRowKeys = ref<number[]>([]);
+const list = ref<SiteAApi.SiteA[]>([]);
+const merchantOptions = ref<{ label: string; value: number }[]>([]);
+
+const merchantFilterOptions = computed(() => [
+  { label: '全部', value: undefined as number | undefined },
+  ...merchantOptions.value,
+]);
 
 const columns = [
   { title: 'ID', dataIndex: 'id', key: 'id', width: 90 },
-  { title: '商户', dataIndex: 'merchant', key: 'merchant', width: 100 },
+  {
+    title: '商户',
+    dataIndex: 'merchantName',
+    key: 'merchantName',
+    width: 120,
+  },
   { title: '域名', key: 'domain', width: 180 },
-  { title: '框架', dataIndex: 'framework', key: 'framework', width: 100 },
+  { title: '框架', dataIndex: 'framework', key: 'framework', width: 120 },
   { title: '状态', key: 'status', width: 100 },
   { title: '创建时间', dataIndex: 'createdAt', key: 'createdAt', width: 170 },
   { title: '创建人', dataIndex: 'createdBy', key: 'createdBy', width: 100 },
@@ -70,35 +80,40 @@ const columns = [
   { title: '操作人', dataIndex: 'updatedBy', key: 'updatedBy', width: 100 },
 ];
 
-const filteredList = computed(() => {
-  return mockSiteAList.value.filter((row) => {
-    if (applied.merchant && row.merchant !== applied.merchant) return false;
-    if (
-      applied.domain &&
-      !row.domain.toLowerCase().includes(applied.domain.trim().toLowerCase())
-    ) {
-      return false;
-    }
-    if (applied.status && row.status !== applied.status) return false;
-    return true;
-  });
-});
+async function loadMerchantOptions() {
+  const options = await getMerchantOptions();
+  merchantOptions.value = options.map((item) => ({
+    label: item.name,
+    value: item.id,
+  }));
+}
 
-function handleSearch() {
-  applied.merchant = searchForm.merchant;
-  applied.domain = searchForm.domain;
-  applied.status = searchForm.status;
+async function loadList() {
+  loading.value = true;
+  try {
+    list.value = await getSiteAList({
+      merchantId: searchForm.merchantId,
+      domain: searchForm.domain.trim() || undefined,
+      status: searchForm.status || undefined,
+    });
+  } finally {
+    loading.value = false;
+  }
+}
+
+async function handleSearch() {
+  await loadList();
 }
 
 function resetSearch() {
-  searchForm.merchant = '';
+  searchForm.merchantId = undefined;
   searchForm.domain = '';
   searchForm.status = '';
-  handleSearch();
+  void loadList();
 }
 
 function resetCreateForm() {
-  createForm.merchant = undefined;
+  createForm.merchantId = undefined;
   createForm.domain = '';
   createForm.framework = undefined;
 }
@@ -109,7 +124,7 @@ function openCreate() {
 }
 
 function validateCreateForm() {
-  if (!createForm.merchant) {
+  if (!createForm.merchantId) {
     message.warning('请选择商户');
     return false;
   }
@@ -125,27 +140,26 @@ function validateCreateForm() {
   return true;
 }
 
-function handleCreateSave() {
+async function handleCreateSave() {
   if (!validateCreateForm()) return;
-  const merchant = createForm.merchant;
+  const merchantId = createForm.merchantId;
   const framework = createForm.framework;
-  if (!merchant || !framework) return;
+  if (!merchantId || !framework) return;
   saving.value = true;
-  const time = nowText();
-  mockSiteAList.value.unshift({
-    id: nextSiteAIdValue(),
-    merchant,
-    domain: createForm.domain.trim(),
-    framework,
-    status: 'pending',
-    createdAt: time,
-    createdBy: 'admin',
-    updatedAt: time,
-    updatedBy: 'admin',
-  });
-  saving.value = false;
-  createOpen.value = false;
-  message.success('已新增（静态，未接后端）');
+  try {
+    await createSiteA({
+      merchantId,
+      domain: createForm.domain.trim(),
+      framework,
+    });
+    createOpen.value = false;
+    message.success('已新增');
+    await loadList();
+  } catch {
+    // 错误提示由 request 拦截器处理
+  } finally {
+    saving.value = false;
+  }
 }
 
 function onSelectionChange(keys: (number | string)[]) {
@@ -160,44 +174,53 @@ function ensureSelection(action: string) {
   return true;
 }
 
-function updateSelectedStatus(status: SiteAStatus, action: string) {
+async function updateSelectedStatus(status: SiteAStatus, action: string) {
   if (!ensureSelection(action)) return;
-  const keySet = new Set(selectedRowKeys.value);
-  const time = nowText();
-  mockSiteAList.value.forEach((row) => {
-    if (!keySet.has(row.id)) return;
-    row.status = status;
-    row.updatedAt = time;
-    row.updatedBy = 'admin';
-  });
-  message.success(`已${action} ${selectedRowKeys.value.length} 条（静态）`);
+  loading.value = true;
+  try {
+    const result = await batchUpdateSiteAStatus({
+      ids: selectedRowKeys.value,
+      status,
+    });
+    message.success(`已${action} ${result.count} 条`);
+    selectedRowKeys.value = [];
+    await loadList();
+  } catch {
+    // 错误提示由 request 拦截器处理
+  } finally {
+    loading.value = false;
+  }
 }
 
 function onExport() {
-  message.info('导出功能暂未接入（静态页）');
+  message.info('导出功能暂未接入');
 }
 
 function onBatchAudit() {
-  updateSelectedStatus('audited', '批量审核');
+  void updateSelectedStatus('audited', '批量审核');
 }
 
 function onApprove() {
-  updateSelectedStatus('audited', '通过');
+  void updateSelectedStatus('audited', '通过');
 }
 
 function onDisable() {
-  updateSelectedStatus('disabled', '禁用');
+  void updateSelectedStatus('disabled', '禁用');
 }
+
+onMounted(async () => {
+  await Promise.all([loadMerchantOptions(), loadList()]);
+});
 </script>
 
 <template>
-  <Page auto-content-height description="当前为静态预览，数据未接后端">
+  <Page auto-content-height description="A站管理">
     <Card class="mb-4" :bordered="false">
       <Form layout="inline" class="w-full gap-y-3">
         <FormItem label="商户">
           <Select
-            v-model:value="searchForm.merchant"
-            :options="MERCHANT_OPTIONS"
+            v-model:value="searchForm.merchantId"
+            :options="merchantFilterOptions"
             allow-clear
             class="!w-36"
             placeholder="商户"
@@ -277,7 +300,7 @@ function onDisable() {
 
       <Table
         :columns="columns"
-        :data-source="filteredList"
+        :data-source="list"
         :loading="loading"
         :pagination="{ pageSize: 10, showSizeChanger: true }"
         :row-selection="{
@@ -320,9 +343,16 @@ function onDisable() {
       <Form layout="vertical" class="pt-2">
         <FormItem label="商户" required>
           <Select
-            v-model:value="createForm.merchant"
-            :options="MERCHANT_FORM_OPTIONS"
+            v-model:value="createForm.merchantId"
+            :options="merchantOptions"
             placeholder="请选择一项"
+            show-search
+            :filter-option="
+              (input, option) =>
+                String(option?.label ?? '')
+                  .toLowerCase()
+                  .includes(input.toLowerCase())
+            "
           />
         </FormItem>
         <FormItem label="域名" required>
