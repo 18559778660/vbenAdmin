@@ -52,10 +52,10 @@ export const ACCOUNT_LIMIT_MODE_LABELS: Record<string, string> = {
   intercept: '拦截',
 };
 
-export const RESET_HOUR_OPTIONS = [
-  { label: '0点', value: 0 },
-  { label: '8点', value: 8 },
-];
+export const RESET_HOUR_OPTIONS = Array.from({ length: 24 }, (_, hour) => ({
+  label: `${hour}点`,
+  value: hour,
+}));
 
 export const PAYMENT_METHOD_LABELS: Record<string, string> = {
   card: '信用卡',
@@ -97,29 +97,12 @@ export const STATUS_OPTIONS = [
   { label: '禁用', value: 0 },
 ];
 
-export const RESET_TIME_OPTIONS = [
-  { label: '北京时间 0点', value: 'beijing-0' },
-  { label: '北京时间 8点', value: 'beijing-8' },
-  { label: '北美夏令时间 0点', value: 'us-dst-0' },
-  { label: '北美夏令时间 8点', value: 'us-dst-8' },
-];
-
 export const SITE_B_OPTIONS = [
   { label: 'www.havetr.com', value: 'www.havetr.com' },
   { label: '默认B站', value: 'default' },
   { label: '备用B站', value: 'backup' },
   { label: '暂不绑定', value: 'none' },
 ];
-
-export function parseResetTime(value: string) {
-  const map: Record<string, { hour: number; timezone: string }> = {
-    'beijing-0': { timezone: '北京时间', hour: 0 },
-    'beijing-8': { timezone: '北京时间', hour: 8 },
-    'us-dst-0': { timezone: '北美夏令时间', hour: 0 },
-    'us-dst-8': { timezone: '北美夏令时间', hour: 8 },
-  };
-  return map[value] ?? { timezone: '北京时间', hour: 0 };
-}
 
 export const mockAccountList = ref<ChannelAccountRow[]>([
   {

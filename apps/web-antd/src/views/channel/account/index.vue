@@ -47,10 +47,8 @@ import {
   money,
   nextAccountIdValue,
   nowText,
-  parseResetTime,
   PAYMENT_METHOD_LABELS,
   RESET_HOUR_OPTIONS,
-  RESET_TIME_OPTIONS,
   SITE_B_OPTIONS,
   STATUS_OPTIONS,
   USER_OPTIONS,
@@ -101,7 +99,7 @@ const step2Form = reactive({
   accountNo: '',
   alias: '',
   status: 1,
-  resetTime: undefined as string | undefined,
+  resetHour: undefined as number | undefined,
   dailyAmountLimit: 0,
   tradeCurrency: undefined as string | undefined,
   sort: 0,
@@ -298,7 +296,7 @@ function resetStep2Form() {
   step2Form.accountNo = '';
   step2Form.alias = '';
   step2Form.status = 1;
-  step2Form.resetTime = undefined;
+  step2Form.resetHour = undefined;
   step2Form.dailyAmountLimit = 0;
   step2Form.tradeCurrency = currencyOptions.value[0]?.value;
   step2Form.sort = 0;
@@ -347,7 +345,6 @@ function submitStep2() {
   }
 
   saving.value = true;
-  const reset = parseResetTime(step2Form.resetTime || 'beijing-0');
   mockAccountList.value.unshift({
     id: nextAccountIdValue(),
     channel: step1Form.channel,
@@ -359,8 +356,8 @@ function submitStep2() {
     assignedUser: 'none',
     totalReceived: 0,
     status: step2Form.status === 1,
-    resetTimezone: reset.timezone,
-    resetHour: reset.hour,
+    resetTimezone: '北京时间',
+    resetHour: step2Form.resetHour ?? 0,
     dailyOrderLimit: step2Form.dailyOrderLimit,
     dailyAmountLimit: step2Form.dailyAmountLimit,
     dailyRecvCount: 0,
@@ -852,9 +849,10 @@ onMounted(() => {
 
           <FormItem label="重置时间">
             <Select
-              v-model:value="step2Form.resetTime"
-              :options="RESET_TIME_OPTIONS"
-              placeholder="请选择一个"
+              v-model:value="step2Form.resetHour"
+              :options="RESET_HOUR_OPTIONS"
+              allow-clear
+              placeholder="请选择一项"
             />
             <div class="text-muted-foreground mt-1 text-xs">
               每日限额重置的北京时间
