@@ -1,7 +1,9 @@
 <script lang="ts" setup>
-import type { SiteBGatewayRow, SiteBRow } from './shared';
+import type { SiteBGatewayRow } from './shared';
 
-import { computed, reactive, ref } from 'vue';
+import type { SiteBApi } from '#/api';
+
+import { computed, onMounted, reactive, ref } from 'vue';
 
 import { Page } from '@vben/common-ui';
 import { IconifyIcon } from '@vben/icons';
@@ -24,22 +26,24 @@ import {
 } from 'ant-design-vue';
 
 import {
+  createSiteB,
+  getChannelList,
+  getSiteBList,
+  setSiteBStatus,
+  updateSiteB,
+} from '#/api';
+
+import {
   accountStatusClass,
   accountStatusText,
-  buildLinkAddress,
   channelText,
-  defaultRunDirectory,
+  DEFAULT_RUN_DIRECTORY,
   FRAMEWORK_OPTIONS,
   FTP_OPTIONS,
   ftpLabel,
   getSiteGateways,
-  mockSiteBList,
-  nextSiteBIdValue,
-  nowText,
   PAYMENT_MODE_COLORS,
   PAYMENT_MODE_LABELS,
-  PLATFORM_FILTER_OPTIONS,
-  PLATFORM_OPTIONS,
   STATUS_FILTER_OPTIONS,
 } from './shared';
 
@@ -53,27 +57,26 @@ const searchForm = reactive({
   platform: '',
 });
 
-const applied = reactive({
-  id: undefined as number | undefined,
-  domain: '',
-  remark: '',
-  status: '' as '0' | '1' | '',
-  platform: '',
-});
-
 const createForm = reactive({
   domain: '',
-  platform: 'stripe',
+  platform: undefined as string | undefined,
   framework: '其他',
   isFtp: 1 as 0 | 1,
   host: '',
   account: '',
   password: '',
-  runDirectory: '',
 });
 
 const loading = ref(false);
 const saving = ref(false);
+const selectedRowKeys = ref<number[]>([]);
+const list = ref<SiteBApi.SiteB[]>([]);
+const channelOptions = ref<{ label: string; value: string }[]>([]);
+
+const platformFilterOptions = computed(() => [
+  { label: '全部', value: '' },
+  ...channelOptions.value,
+]);
 const createOpen = ref(false);
 const editOpen = ref(false);
 const gatewayOpen = ref(false);
@@ -135,39 +138,43 @@ const gatewayColumns = [
   { title: '网关', key: 'gateway', width: 90 },
 ];
 
-const filteredList = computed(() => {
-  return mockSiteBList.value.filter((row) => {
-    if (applied.id && row.id !== applied.id) return false;
-    if (
-      applied.domain &&
-      !row.domain.toLowerCase().includes(applied.domain.trim().toLowerCase())
-    ) {
-      return false;
-    }
-    if (
-      applied.remark &&
-      !row.remark.toLowerCase().includes(applied.remark.trim().toLowerCase())
-    ) {
-      return false;
-    }
-    if (applied.platform && row.platform !== applied.platform) return false;
-    if (applied.status === '1' && !row.status) return false;
-    if (applied.status === '0' && row.status) return false;
-    return true;
-  });
-});
-
 const gatewayList = computed(() => {
   if (!viewingSiteId.value) return [];
   return getSiteGateways(viewingSiteId.value);
 });
 
-function handleSearch() {
-  applied.id = searchForm.id;
-  applied.domain = searchForm.domain;
-  applied.remark = searchForm.remark;
-  applied.status = searchForm.status;
-  applied.platform = searchForm.platform;
+async function loadChannelOptions() {
+  try {
+    const rows = await getChannelList();
+    const names = [
+      ...new Set(rows.map((row) => row.name.trim()).filter(Boolean)),
+    ].toSorted();
+    channelOptions.value = names.map((name) => ({
+      label: name,
+      value: name,
+    }));
+  } catch {
+    channelOptions.value = [];
+  }
+}
+
+async function loadList() {
+  loading.value = true;
+  try {
+    list.value = await getSiteBList({
+      id: searchForm.id,
+      domain: searchForm.domain.trim() || undefined,
+      remark: searchForm.remark.trim() || undefined,
+      status: searchForm.status || undefined,
+      platform: searchForm.platform || undefined,
+    });
+  } finally {
+    loading.value = false;
+  }
+}
+
+async function handleSearch() {
+  await loadList();
 }
 
 function resetSearch() {
@@ -176,18 +183,17 @@ function resetSearch() {
   searchForm.remark = '';
   searchForm.status = '';
   searchForm.platform = '';
-  handleSearch();
+  void loadList();
 }
 
 function resetCreateForm() {
   createForm.domain = '';
-  createForm.platform = 'stripe';
+  createForm.platform = channelOptions.value[0]?.value;
   createForm.framework = '其他';
   createForm.isFtp = 1;
   createForm.host = '';
   createForm.account = '';
   createForm.password = '';
-  createForm.runDirectory = '';
 }
 
 function openCreate() {
@@ -200,62 +206,77 @@ function validateCreateForm() {
     message.warning('请输入域名');
     return false;
   }
+  if (!createForm.platform) {
+    message.warning('请选择通道平台');
+    return false;
+  }
   return true;
 }
 
-function handleCreateSave() {
+async function handleCreateSave() {
   if (!validateCreateForm()) return;
+  const platform = createForm.platform;
+  if (!platform) return;
   saving.value = true;
-  const time = nowText();
-  const isFtp = createForm.isFtp === 1;
-  mockSiteBList.value.unshift({
-    id: nextSiteBIdValue(),
-    domain: createForm.domain.trim(),
-    channel: createForm.platform,
-    channelEnabled: true,
-    platform: createForm.platform,
-    framework: createForm.framework,
-    status: true,
-    isFtp,
-    host: createForm.host.trim(),
-    account: createForm.account.trim(),
-    password: createForm.password,
-    linkAddress: buildLinkAddress(isFtp, createForm.host, createForm.account),
-    runDirectory:
-      createForm.runDirectory.trim() ||
-      defaultRunDirectory(createForm.platform),
-    remark: '',
-    updatedBy: 'admin',
-    updatedAt: time,
-    createdBy: 'admin',
-    createdAt: time,
-  });
-  saving.value = false;
-  createOpen.value = false;
-  message.success('已新增（静态，未接后端）');
+  try {
+    await createSiteB({
+      domain: createForm.domain.trim(),
+      platform,
+      framework: createForm.framework,
+      isFtp: createForm.isFtp === 1,
+      host: createForm.host.trim(),
+      account: createForm.account.trim(),
+      password: createForm.password,
+    });
+    createOpen.value = false;
+    message.success('已新增');
+    await loadList();
+  } catch {
+    // 错误提示由 request 拦截器处理
+  } finally {
+    saving.value = false;
+  }
 }
 
-function onToggleStatus(row: SiteBRow, checked: boolean | number | string) {
-  row.status = Boolean(checked);
-  row.updatedAt = nowText();
-  row.updatedBy = 'admin';
+async function onToggleStatus(
+  row: SiteBApi.SiteB,
+  checked: boolean | number | string,
+) {
+  const status = Boolean(checked);
+  loading.value = true;
+  try {
+    const updated = await setSiteBStatus(row.id, status);
+    Object.assign(row, updated);
+  } catch {
+    // 错误提示由 request 拦截器处理
+  } finally {
+    loading.value = false;
+  }
+}
+
+function onSelectionChange(keys: (number | string)[]) {
+  selectedRowKeys.value = keys.map(Number);
 }
 
 function onUpdateCode() {
-  message.info('更新代码功能暂未接入（静态页）');
+  if (selectedRowKeys.value.length === 0) {
+    message.warning('请先勾选要更新代码的记录');
+    return;
+  }
+  message.info('更新代码功能暂未接入');
 }
 
-function openGatewayList(row: SiteBRow) {
+function openGatewayList(row: SiteBApi.SiteB) {
   viewingSiteId.value = row.id;
   viewingDomain.value = row.domain;
   gatewayOpen.value = true;
 }
 
 function onGatewayAction() {
-  message.info('网关配置暂未接入（静态页）');
+  message.info('网关配置暂未接入');
 }
 
-function openEdit(row: SiteBRow) {
+function openEdit(row: SiteBApi.SiteB) {
   editingId.value = row.id;
   editForm.platform = row.platform;
   editForm.framework = row.framework;
@@ -266,26 +287,34 @@ function openEdit(row: SiteBRow) {
   editOpen.value = true;
 }
 
-function handleEditSave() {
+async function handleEditSave() {
   if (!editingId.value) return;
   saving.value = true;
-  const row = mockSiteBList.value.find((item) => item.id === editingId.value);
-  if (row) {
-    row.host = editForm.host.trim();
-    row.account = editForm.account.trim();
-    row.password = editForm.password;
-    row.linkAddress = buildLinkAddress(row.isFtp, row.host, row.account);
-    row.updatedAt = nowText();
-    row.updatedBy = 'admin';
+  try {
+    await updateSiteB(editingId.value, {
+      host: editForm.host.trim(),
+      account: editForm.account.trim(),
+      password: editForm.password,
+    });
+    editOpen.value = false;
+    message.success('已保存');
+    await loadList();
+  } catch {
+    // 错误提示由 request 拦截器处理
+  } finally {
+    saving.value = false;
   }
-  saving.value = false;
-  editOpen.value = false;
-  message.success('已保存（静态，未接后端）');
 }
+
+onMounted(async () => {
+  await loadChannelOptions();
+  resetCreateForm();
+  await loadList();
+});
 </script>
 
 <template>
-  <Page auto-content-height description="当前为静态预览，数据未接后端">
+  <Page auto-content-height description="B站管理">
     <Card class="mb-4" :bordered="false">
       <Form layout="inline" class="w-full gap-y-3">
         <FormItem label="ID">
@@ -325,7 +354,7 @@ function handleEditSave() {
         <FormItem label="通道平台">
           <Select
             v-model:value="searchForm.platform"
-            :options="PLATFORM_FILTER_OPTIONS"
+            :options="platformFilterOptions"
             allow-clear
             class="!w-32"
             placeholder="通道平台"
@@ -370,9 +399,13 @@ function handleEditSave() {
 
       <Table
         :columns="columns"
-        :data-source="filteredList"
+        :data-source="list"
         :loading="loading"
         :pagination="{ pageSize: 10, showSizeChanger: true }"
+        :row-selection="{
+          selectedRowKeys,
+          onChange: onSelectionChange,
+        }"
         :scroll="{ x: 1580 }"
         row-key="id"
         size="small"
@@ -384,7 +417,7 @@ function handleEditSave() {
                 <Button
                   size="small"
                   type="link"
-                  @click="openGatewayList(record as SiteBRow)"
+                  @click="openGatewayList(record as SiteBApi.SiteB)"
                 >
                   <IconifyIcon class="size-4" icon="lucide:eye" />
                 </Button>
@@ -393,7 +426,7 @@ function handleEditSave() {
                 <Button
                   size="small"
                   type="link"
-                  @click="openEdit(record as SiteBRow)"
+                  @click="openEdit(record as SiteBApi.SiteB)"
                 >
                   <IconifyIcon class="size-4" icon="lucide:pencil" />
                 </Button>
@@ -401,23 +434,19 @@ function handleEditSave() {
             </Space>
           </template>
           <template v-else-if="column.key === 'channel'">
-            {{ channelText(record as SiteBRow) }}
+            {{ channelText(record as SiteBApi.SiteB) }}
           </template>
           <template v-else-if="column.key === 'status'">
             <Switch
               :checked="record.status"
               size="small"
-              @change="(checked) => onToggleStatus(record as SiteBRow, checked)"
+              @change="
+                (checked) => onToggleStatus(record as SiteBApi.SiteB, checked)
+              "
             />
           </template>
           <template v-else-if="column.key === 'runDirectory'">
-            <a
-              v-if="record.runDirectory"
-              class="text-primary"
-              href="javascript:void(0)"
-            >
-              {{ record.runDirectory }}
-            </a>
+            <span v-if="record.runDirectory">{{ record.runDirectory }}</span>
           </template>
           <template v-else-if="column.key === 'updated'">
             <div>{{ record.updatedBy }}</div>
@@ -452,8 +481,15 @@ function handleEditSave() {
         <FormItem label="通道平台">
           <Select
             v-model:value="createForm.platform"
-            :options="PLATFORM_OPTIONS"
+            :options="channelOptions"
             placeholder="请选择一项"
+            show-search
+            :filter-option="
+              (input, option) =>
+                String(option?.label ?? '')
+                  .toLowerCase()
+                  .includes(input.toLowerCase())
+            "
           />
         </FormItem>
         <FormItem label="框架">
@@ -486,13 +522,7 @@ function handleEditSave() {
           <div class="text-muted-foreground mt-1 text-xs">非必填，建议填写</div>
         </FormItem>
         <FormItem label="运行目录">
-          <Input
-            v-model:value="createForm.runDirectory"
-            placeholder="请输入运行目录"
-          />
-          <div class="text-muted-foreground mt-1 text-xs">
-            stripe 系列清空 其他通道默认填【deal】
-          </div>
+          <Input :value="DEFAULT_RUN_DIRECTORY" disabled />
         </FormItem>
         <FormItem>
           <Space>
