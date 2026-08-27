@@ -359,7 +359,7 @@ async function handleSave() {
       settleRate: form.settleRate,
       payParams: form.payParams,
       productInfo: form.productInfo,
-      channelCode: form.channelCode.trim(),
+      channelCode: '',
       payCode: form.payCode.trim(),
       returnVerify: form.returnVerify,
       oldCustomerDays: form.oldCustomerDays,
@@ -447,7 +447,6 @@ async function handleEditSave() {
   saving.value = true;
   try {
     await updateChannelLimits(editingId.value, {
-      channelCode: editForm.channelCode.trim(),
       dailyAmountLimit: editForm.dailyAmountLimit,
       payFrequency: editForm.payFrequency,
       failCount: editForm.failCount,
@@ -843,11 +842,10 @@ onMounted(() => {
               <Input
                 v-model:value="form.channelCode"
                 allow-clear
-                placeholder="请输入通道CODE"
+                disabled
+                placeholder="暂未开放"
               />
-              <div class="text-muted-foreground mt-1 text-xs">
-                需于网站目录名一致
-              </div>
+              <div class="text-muted-foreground mt-1 text-xs">暂未开放</div>
             </FormItem>
             <FormItem label="支付CODE">
               <Input
@@ -1059,8 +1057,10 @@ onMounted(() => {
               <Input
                 v-model:value="editForm.channelCode"
                 allow-clear
-                placeholder="请输入通道CODE"
+                disabled
+                placeholder="暂未开放"
               />
+              <div class="text-muted-foreground mt-1 text-xs">暂未开放</div>
             </FormItem>
             <FormItem label="日限金额(USD)">
               <InputNumber
