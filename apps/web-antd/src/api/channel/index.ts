@@ -4,6 +4,9 @@ export namespace ChannelApi {
   export interface Channel {
     id: number;
     name: string;
+    platformId: number;
+    platform: string;
+    platformName: string;
     packageName: string;
     packageUrl: string;
     totalAmount: number;
@@ -64,8 +67,15 @@ export namespace ChannelApi {
     name?: string;
   }
 
+  export interface PlatformOption {
+    id: number;
+    code: string;
+    label: string;
+  }
+
   export interface CreatePayload {
     name: string;
+    platformId: number;
     paymentMode?: string;
     siteBGroup?: string;
     orderNoMode?: string;
@@ -124,6 +134,11 @@ export namespace ChannelApi {
 
 export async function getChannelList(params?: ChannelApi.ListParams) {
   return requestClient.get<ChannelApi.Channel[]>('/channels', { params });
+}
+
+/** 通道平台分类下拉 */
+export async function getChannelPlatformOptions() {
+  return requestClient.get<ChannelApi.PlatformOption[]>('/channels/platforms');
 }
 
 export async function createChannel(data: ChannelApi.CreatePayload) {

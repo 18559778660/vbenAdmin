@@ -6,7 +6,9 @@ export namespace SiteBApi {
     domain: string;
     channel: string;
     channelEnabled: boolean;
+    platformId: number;
     platform: string;
+    platformName: string;
     framework: string;
     status: boolean;
     isFtp: boolean;
@@ -27,12 +29,12 @@ export namespace SiteBApi {
     domain?: string;
     remark?: string;
     status?: '0' | '1' | '';
-    platform?: string;
+    platformId?: number;
   }
 
   export interface CreatePayload {
     domain: string;
-    platform?: string;
+    platformId: number;
     framework?: string;
     isFtp?: boolean;
     host?: string;

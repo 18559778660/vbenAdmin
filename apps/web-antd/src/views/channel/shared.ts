@@ -40,6 +40,9 @@ export type ChannelRow = {
   payFrequency: number;
   paymentMode: string;
   payParams: string;
+  platform: string;
+  platformId: number;
+  platformName: string;
   preferCountries: string[];
   productInfo: string;
   remark: string;
@@ -194,6 +197,9 @@ function baseRow(
     interceptMin: 0,
     status: true,
     paymentMode: 'local',
+    platformId: 1,
+    platform: 'stripe',
+    platformName: 'stripe',
     gatewayUrl: '',
     successMode: 'unlimited',
     countries: [],

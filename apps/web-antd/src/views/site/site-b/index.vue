@@ -27,7 +27,7 @@ import {
 
 import {
   createSiteB,
-  getChannelList,
+  getChannelPlatformOptions,
   getSiteBList,
   setSiteBStatus,
   updateSiteB,
@@ -54,12 +54,12 @@ const searchForm = reactive({
   domain: '',
   remark: '',
   status: '' as '0' | '1' | '',
-  platform: '',
+  platformId: undefined as number | undefined,
 });
 
 const createForm = reactive({
   domain: '',
-  platform: undefined as string | undefined,
+  platformId: undefined as number | undefined,
   framework: '其他',
   isFtp: 1 as 0 | 1,
   host: '',
@@ -71,12 +71,13 @@ const loading = ref(false);
 const saving = ref(false);
 const selectedRowKeys = ref<number[]>([]);
 const list = ref<SiteBApi.SiteB[]>([]);
-const channelOptions = ref<{ label: string; value: string }[]>([]);
+const platformOptions = ref<{ label: string; value: number }[]>([]);
 
 const platformFilterOptions = computed(() => [
-  { label: '全部', value: '' },
-  ...channelOptions.value,
+  { label: '全部', value: undefined },
+  ...platformOptions.value,
 ]);
+
 const createOpen = ref(false);
 const editOpen = ref(false);
 const gatewayOpen = ref(false);
@@ -85,7 +86,7 @@ const viewingSiteId = ref<null | number>(null);
 const viewingDomain = ref('');
 
 const editForm = reactive({
-  platform: '',
+  platformName: '',
   framework: '',
   isFtp: true,
   host: '',
@@ -143,18 +144,15 @@ const gatewayList = computed(() => {
   return getSiteGateways(viewingSiteId.value);
 });
 
-async function loadChannelOptions() {
+async function loadPlatformOptions() {
   try {
-    const rows = await getChannelList();
-    const names = [
-      ...new Set(rows.map((row) => row.name.trim()).filter(Boolean)),
-    ].toSorted();
-    channelOptions.value = names.map((name) => ({
-      label: name,
-      value: name,
+    const rows = await getChannelPlatformOptions();
+    platformOptions.value = rows.map((row) => ({
+      label: row.label,
+      value: row.id,
     }));
   } catch {
-    channelOptions.value = [];
+    platformOptions.value = [];
   }
 }
 
@@ -166,7 +164,7 @@ async function loadList() {
       domain: searchForm.domain.trim() || undefined,
       remark: searchForm.remark.trim() || undefined,
       status: searchForm.status || undefined,
-      platform: searchForm.platform || undefined,
+      platformId: searchForm.platformId,
     });
   } finally {
     loading.value = false;
@@ -182,13 +180,13 @@ function resetSearch() {
   searchForm.domain = '';
   searchForm.remark = '';
   searchForm.status = '';
-  searchForm.platform = '';
+  searchForm.platformId = undefined;
   void loadList();
 }
 
 function resetCreateForm() {
   createForm.domain = '';
-  createForm.platform = channelOptions.value[0]?.value;
+  createForm.platformId = platformOptions.value[0]?.value;
   createForm.framework = '其他';
   createForm.isFtp = 1;
   createForm.host = '';
@@ -206,7 +204,7 @@ function validateCreateForm() {
     message.warning('请输入域名');
     return false;
   }
-  if (!createForm.platform) {
+  if (!createForm.platformId) {
     message.warning('请选择通道平台');
     return false;
   }
@@ -215,13 +213,13 @@ function validateCreateForm() {
 
 async function handleCreateSave() {
   if (!validateCreateForm()) return;
-  const platform = createForm.platform;
-  if (!platform) return;
+  const platformId = createForm.platformId;
+  if (!platformId) return;
   saving.value = true;
   try {
     await createSiteB({
       domain: createForm.domain.trim(),
-      platform,
+      platformId,
       framework: createForm.framework,
       isFtp: createForm.isFtp === 1,
       host: createForm.host.trim(),
@@ -278,7 +276,7 @@ function onGatewayAction() {
 
 function openEdit(row: SiteBApi.SiteB) {
   editingId.value = row.id;
-  editForm.platform = row.platform;
+  editForm.platformName = row.platformName || row.platform;
   editForm.framework = row.framework;
   editForm.isFtp = row.isFtp;
   editForm.host = row.host;
@@ -307,7 +305,7 @@ async function handleEditSave() {
 }
 
 onMounted(async () => {
-  await loadChannelOptions();
+  await loadPlatformOptions();
   resetCreateForm();
   await loadList();
 });
@@ -353,7 +351,7 @@ onMounted(async () => {
         </FormItem>
         <FormItem label="通道平台">
           <Select
-            v-model:value="searchForm.platform"
+            v-model:value="searchForm.platformId"
             :options="platformFilterOptions"
             allow-clear
             class="!w-32"
@@ -478,18 +476,11 @@ onMounted(async () => {
             必填，如: www.baidu.com
           </div>
         </FormItem>
-        <FormItem label="通道平台">
+        <FormItem label="通道平台" required>
           <Select
-            v-model:value="createForm.platform"
-            :options="channelOptions"
+            v-model:value="createForm.platformId"
+            :options="platformOptions"
             placeholder="请选择一项"
-            show-search
-            :filter-option="
-              (input, option) =>
-                String(option?.label ?? '')
-                  .toLowerCase()
-                  .includes(input.toLowerCase())
-            "
           />
         </FormItem>
         <FormItem label="框架">
@@ -544,7 +535,7 @@ onMounted(async () => {
     >
       <Form layout="vertical" class="pt-2">
         <FormItem label="通道平台">
-          <div>{{ editForm.platform }}</div>
+          <div>{{ editForm.platformName }}</div>
         </FormItem>
         <FormItem label="框架">
           <div>{{ editForm.framework }}</div>

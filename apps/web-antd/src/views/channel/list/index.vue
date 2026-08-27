@@ -35,6 +35,7 @@ import {
   createChannel,
   downloadChannelPackage,
   getChannelList,
+  getChannelPlatformOptions,
   setChannelStatus,
   updateChannel,
   updateChannelLimits,
@@ -75,6 +76,7 @@ const applied = reactive({
 const loading = ref(false);
 const list = ref<ChannelRow[]>([]);
 const channelNameOptions = ref<{ label: string; value: string }[]>([]);
+const platformOptions = ref<{ label: string; value: number }[]>([]);
 const modalOpen = ref(false);
 const infoOpen = ref(false);
 const editOpen = ref(false);
@@ -86,6 +88,7 @@ const packageUploadChannelId = ref<null | number>(null);
 
 const form = reactive({
   name: '',
+  platformId: undefined as number | undefined,
   paymentMode: 'local',
   siteBGroup: '',
   orderNoMode: 'site',
@@ -158,6 +161,7 @@ const columns = [
     fixed: 'left' as const,
   },
   { title: '通道名称', dataIndex: 'name', key: 'name', width: 120 },
+  { title: '通道平台', dataIndex: 'platform', key: 'platform', width: 100 },
   { title: '压缩包', key: 'package', width: 80 },
   { title: '剩余金额', key: 'remain', width: 150 },
   { title: '金额设置', key: 'amountSetting', width: 220 },
@@ -226,6 +230,18 @@ function buildListParams() {
   return params;
 }
 
+async function loadPlatformOptions() {
+  try {
+    const rows = await getChannelPlatformOptions();
+    platformOptions.value = rows.map((row) => ({
+      label: row.label,
+      value: row.id,
+    }));
+  } catch {
+    platformOptions.value = [];
+  }
+}
+
 async function loadChannelNameOptions() {
   try {
     const rows = await getChannelList();
@@ -251,7 +267,11 @@ async function loadList() {
 }
 
 async function refreshPage() {
-  await Promise.all([loadList(), loadChannelNameOptions()]);
+  await Promise.all([
+    loadList(),
+    loadChannelNameOptions(),
+    loadPlatformOptions(),
+  ]);
 }
 
 function handleSearch() {
@@ -274,6 +294,7 @@ function handleRefresh() {
 
 function resetForm() {
   form.name = '';
+  form.platformId = platformOptions.value[0]?.value;
   form.paymentMode = 'local';
   form.siteBGroup = '';
   form.orderNoMode = 'site';
@@ -349,10 +370,15 @@ async function handleSave() {
     message.warning('请输入通道名');
     return;
   }
+  if (!form.platformId) {
+    message.warning('请选择通道平台');
+    return;
+  }
   saving.value = true;
   try {
     await createChannel({
       name,
+      platformId: form.platformId,
       paymentMode: form.paymentMode,
       siteBGroup: form.siteBGroup.trim(),
       orderNoMode: form.orderNoMode,
@@ -784,6 +810,13 @@ onMounted(() => {
                 v-model:value="form.name"
                 allow-clear
                 placeholder="请输入通道名"
+              />
+            </FormItem>
+            <FormItem label="通道平台" required>
+              <Select
+                v-model:value="form.platformId"
+                :options="platformOptions"
+                placeholder="请选择通道平台"
               />
             </FormItem>
             <FormItem label="支付模式">
