@@ -1,7 +1,7 @@
 <script lang="ts" setup>
 import type { Dayjs } from 'dayjs';
 
-import type { ChannelAccountRow } from './shared';
+import type { ChannelAccountApi } from '#/api';
 
 import { computed, onMounted, reactive, ref } from 'vue';
 
@@ -27,36 +27,40 @@ import {
 } from 'ant-design-vue';
 
 import {
+  createChannelAccount,
   getCardTypeList,
+  getChannelAccountList,
+  getChannelList,
   getCountryOptions,
   getCurrencyOptions,
-} from '#/api/basic-config';
+  getSiteBList,
+  setChannelAccountStatus,
+  updateChannelAccount,
+  updateChannelAccountLimits,
+} from '#/api';
 
 import {
   CARD_BRAND_LABELS,
   INTERCEPT_MODE_LABELS,
   SUCCESS_MODE_LABELS,
   toOptions,
+  validateInterceptRange,
 } from '../shared';
 import {
   ACCOUNT_LIMIT_MODE_LABELS,
-  CHANNEL_OPTIONS,
   GROUP_OPTIONS,
   groupLabel,
-  mockAccountList,
   money,
-  nextAccountIdValue,
-  nowText,
-  PAYMENT_METHOD_LABELS,
   RESET_HOUR_OPTIONS,
-  SITE_B_OPTIONS,
   STATUS_OPTIONS,
   USER_OPTIONS,
+  validateAccountSuccessSetting,
 } from './shared';
 
 defineOptions({ name: 'ChannelAccount' });
 
 type ViewMode = 'create-step1' | 'create-step2' | 'list';
+type ChannelAccountRow = ChannelAccountApi.ChannelAccount;
 
 const { RangePicker } = DatePicker;
 
@@ -71,7 +75,7 @@ const searchForm = reactive({
   name: '',
   alias: '',
   remark: '',
-  paymentMethod: '',
+  channelId: undefined as number | undefined,
   createdRange: undefined as [Dayjs, Dayjs] | undefined,
   groupName: '',
   assignedUser: '',
@@ -82,7 +86,7 @@ const applied = reactive({
   name: '',
   alias: '',
   remark: '',
-  paymentMethod: '',
+  channelId: undefined as number | undefined,
   createdRange: undefined as [Dayjs, Dayjs] | undefined,
   groupName: '',
   assignedUser: '',
@@ -90,9 +94,12 @@ const applied = reactive({
 });
 
 const loading = ref(false);
+const accountList = ref<ChannelAccountRow[]>([]);
+const channelOptions = ref<{ label: string; value: number }[]>([]);
+const siteBOptions = ref<{ label: string; value: number }[]>([]);
 
 const step1Form = reactive({
-  channel: undefined as string | undefined,
+  channelId: undefined as number | undefined,
 });
 
 const step2Form = reactive({
@@ -105,7 +112,7 @@ const step2Form = reactive({
   sort: 0,
   publicKey: '',
   webSecret: '',
-  siteB: undefined as string | undefined,
+  siteBId: undefined as number | undefined,
   dailyOrderLimit: 0,
   disableCountries: [] as string[],
   preferCountries: [] as string[],
@@ -121,7 +128,7 @@ const editForm = reactive({
   appId: '',
   merchantId: '',
   webSecret: '',
-  siteB: undefined as string | undefined,
+  siteBId: undefined as number | undefined,
   remark: '',
   privateKey: '',
   environment: 'live',
@@ -155,19 +162,16 @@ const limitModeOptions = Object.entries(ACCOUNT_LIMIT_MODE_LABELS).map(
   ([value, label]) => ({ label, value }),
 );
 
-const paymentMethodOptions = Object.entries(PAYMENT_METHOD_LABELS).map(
-  ([value, label]) => ({ label, value }),
-);
-
-const paymentFilterOptions = [
-  { label: '全部', value: '' },
-  ...paymentMethodOptions,
-];
+const channelFilterOptions = computed(() => [
+  { label: '全部', value: undefined },
+  ...channelOptions.value,
+]);
 
 const selectedChannelLabel = computed(
   () =>
-    CHANNEL_OPTIONS.find((item) => item.value === step1Form.channel)?.label ||
-    step1Form.channel ||
+    channelOptions.value.find((item) => item.value === step1Form.channelId)
+      ?.label ||
+    step1Form.channelId ||
     '',
 );
 
@@ -196,56 +200,75 @@ const columns = [
   { title: '成功设置', key: 'successMode', width: 100 },
   { title: '禁用国家', key: 'disableCountries', width: 120 },
   { title: '优先国家', key: 'preferCountries', width: 120 },
+  { title: '更新', key: 'updated', width: 170 },
+  { title: '创建', key: 'created', width: 170 },
 ];
 
 const unpaidCount = computed(
-  () => mockAccountList.value.filter((row) => row.unpaidClosed).length,
+  () => accountList.value.filter((row) => row.unpaidClosed).length,
 );
 const restrictedCount = computed(
-  () => mockAccountList.value.filter((row) => row.restrictedClosed).length,
+  () => accountList.value.filter((row) => row.restrictedClosed).length,
 );
 const closed8Count = computed(
-  () => mockAccountList.value.filter((row) => row.cannotOpenAt8).length,
+  () => accountList.value.filter((row) => row.cannotOpenAt8).length,
 );
 
-const filteredList = computed(() => {
-  return mockAccountList.value.filter((row) => {
-    if (applied.id && row.id !== applied.id) return false;
-    if (applied.name && !row.channel.includes(applied.name.trim()))
-      return false;
-    if (applied.alias && !row.alias.includes(applied.alias.trim()))
-      return false;
-    if (applied.remark && !row.remark.includes(applied.remark.trim()))
-      return false;
-    if (applied.paymentMethod && row.paymentMethod !== applied.paymentMethod)
-      return false;
-    if (applied.groupName && row.groupName !== applied.groupName) return false;
-    if (applied.assignedUser && row.assignedUser !== applied.assignedUser)
-      return false;
-    if (applied.createdRange) {
-      const start = applied.createdRange[0].format('YYYY-MM-DD');
-      const end = applied.createdRange[1].format('YYYY-MM-DD');
-      const day = row.createdAt.slice(0, 10);
-      if (day < start || day > end) return false;
-    }
-    if (applied.listFilter === 'unpaid' && !row.unpaidClosed) return false;
-    if (applied.listFilter === 'restricted' && !row.restrictedClosed)
-      return false;
-    if (applied.listFilter === 'closed8' && !row.cannotOpenAt8) return false;
-    return true;
-  });
-});
+async function loadChannelOptions() {
+  try {
+    const rows = await getChannelList();
+    channelOptions.value = rows.map((row) => ({
+      label: row.name,
+      value: row.id,
+    }));
+  } catch {
+    channelOptions.value = [];
+  }
+}
+
+async function loadSiteBOptions() {
+  try {
+    const rows = await getSiteBList();
+    siteBOptions.value = rows.map((row) => ({
+      label: row.domain,
+      value: row.id,
+    }));
+  } catch {
+    siteBOptions.value = [];
+  }
+}
+
+async function loadList() {
+  loading.value = true;
+  try {
+    accountList.value = await getChannelAccountList({
+      id: applied.id,
+      channelId: applied.channelId,
+      channelName: applied.name.trim() || undefined,
+      alias: applied.alias.trim() || undefined,
+      remark: applied.remark.trim() || undefined,
+      groupName: applied.groupName || undefined,
+      assignedUser: applied.assignedUser || undefined,
+      createdFrom: applied.createdRange?.[0]?.format('YYYY-MM-DD'),
+      createdTo: applied.createdRange?.[1]?.format('YYYY-MM-DD'),
+      listFilter: applied.listFilter || undefined,
+    });
+  } finally {
+    loading.value = false;
+  }
+}
 
 function handleSearch() {
   applied.id = searchForm.id;
   applied.name = searchForm.name;
   applied.alias = searchForm.alias;
   applied.remark = searchForm.remark;
-  applied.paymentMethod = searchForm.paymentMethod;
+  applied.channelId = searchForm.channelId;
   applied.createdRange = searchForm.createdRange;
   applied.groupName = searchForm.groupName;
   applied.assignedUser = searchForm.assignedUser;
   applied.listFilter = '';
+  void loadList();
 }
 
 function resetSearch() {
@@ -253,7 +276,7 @@ function resetSearch() {
   searchForm.name = '';
   searchForm.alias = '';
   searchForm.remark = '';
-  searchForm.paymentMethod = '';
+  searchForm.channelId = undefined;
   searchForm.createdRange = undefined;
   searchForm.groupName = '';
   searchForm.assignedUser = '';
@@ -261,15 +284,12 @@ function resetSearch() {
 }
 
 function handleRefresh() {
-  loading.value = true;
-  window.setTimeout(() => {
-    loading.value = false;
-    message.success('已刷新（静态数据）');
-  }, 200);
+  void loadList();
 }
 
 function applyListFilter(filter: typeof applied.listFilter) {
   applied.listFilter = applied.listFilter === filter ? '' : filter;
+  void loadList();
 }
 
 async function loadConfigOptions() {
@@ -302,7 +322,7 @@ function resetStep2Form() {
   step2Form.sort = 0;
   step2Form.publicKey = '';
   step2Form.webSecret = '';
-  step2Form.siteB = undefined;
+  step2Form.siteBId = undefined;
   step2Form.dailyOrderLimit = 0;
   step2Form.disableCountries = [];
   step2Form.preferCountries = [];
@@ -311,7 +331,7 @@ function resetStep2Form() {
 }
 
 function openCreate() {
-  step1Form.channel = undefined;
+  step1Form.channelId = undefined;
   resetStep2Form();
   viewMode.value = 'create-step1';
 }
@@ -321,7 +341,7 @@ function backToList() {
 }
 
 function submitStep1() {
-  if (!step1Form.channel) {
+  if (!step1Form.channelId) {
     message.warning('请选择通道');
     return;
   }
@@ -333,67 +353,50 @@ function backToStep1() {
   viewMode.value = 'create-step1';
 }
 
-function submitStep2() {
+async function submitStep2() {
   if (!step2Form.accountNo.trim()) {
     message.warning('请输入通道账号');
     return;
   }
-  if (!step1Form.channel) {
+  if (!step2Form.siteBId) {
+    message.warning('请选择B站');
+    return;
+  }
+  if (!step1Form.channelId) {
     message.warning('请先选择通道');
     viewMode.value = 'create-step1';
     return;
   }
 
   saving.value = true;
-  mockAccountList.value.unshift({
-    id: nextAccountIdValue(),
-    channel: step1Form.channel,
-    accountNo: step2Form.accountNo.trim(),
-    alias: step2Form.alias.trim(),
-    remark: step2Form.remark.trim(),
-    paymentMethod: 'card',
-    groupName: 'default',
-    assignedUser: 'none',
-    totalReceived: 0,
-    status: step2Form.status === 1,
-    resetTimezone: '北京时间',
-    resetHour: step2Form.resetHour ?? 0,
-    dailyOrderLimit: step2Form.dailyOrderLimit,
-    dailyAmountLimit: step2Form.dailyAmountLimit,
-    dailyRecvCount: 0,
-    dailyRecvAmount: 0,
-    interceptMode: 'reset',
-    interceptCurrency: step2Form.tradeCurrency || 'USD',
-    interceptMax: 0,
-    interceptMin: 0,
-    amountLimitMode: 'reset',
-    calcCurrency: step2Form.tradeCurrency || 'USD',
-    currencies: step2Form.tradeCurrency ? [step2Form.tradeCurrency] : [],
-    allowCountries: [],
-    allowCardTypes: [],
-    disableCardTypes: [],
-    disableCardBrands: [],
-    payFrequency: 0,
-    successCountLimit: 0,
-    maxSuccessCount: 0,
-    successMode: 'unlimited',
-    disableCountries: [...step2Form.disableCountries],
-    preferCountries: [...step2Form.preferCountries],
-    sort: step2Form.sort,
-    appId: step2Form.publicKey,
-    merchantId: '',
-    webSecret: step2Form.webSecret,
-    privateKey: step2Form.privateKey,
-    environment: 'live',
-    siteB: step2Form.siteB || '',
-    unpaidClosed: false,
-    restrictedClosed: false,
-    cannotOpenAt8: step2Form.siteB === 'none',
-    createdAt: nowText(),
-  });
-  saving.value = false;
-  message.success('已新增（静态，未接后端）');
-  backToList();
+  try {
+    await createChannelAccount({
+      channelId: step1Form.channelId,
+      siteBId: step2Form.siteBId,
+      accountNo: step2Form.accountNo.trim(),
+      alias: step2Form.alias.trim(),
+      status: step2Form.status === 1,
+      resetHour: step2Form.resetHour,
+      dailyOrderLimit: step2Form.dailyOrderLimit,
+      dailyAmountLimit: step2Form.dailyAmountLimit,
+      calcCurrency: step2Form.tradeCurrency,
+      currencies: step2Form.tradeCurrency ? [step2Form.tradeCurrency] : [],
+      preferCountries: [...step2Form.preferCountries],
+      disableCountries: [...step2Form.disableCountries],
+      sort: step2Form.sort,
+      appId: step2Form.publicKey.trim(),
+      webSecret: step2Form.webSecret.trim(),
+      privateKey: step2Form.privateKey,
+      remark: step2Form.remark.trim(),
+    });
+    message.success('已新增');
+    backToList();
+    await loadList();
+  } catch {
+    // 错误提示由 request 拦截器处理
+  } finally {
+    saving.value = false;
+  }
 }
 
 function onEdit(row: ChannelAccountRow) {
@@ -405,7 +408,7 @@ function onEdit(row: ChannelAccountRow) {
   editForm.appId = row.appId;
   editForm.merchantId = row.merchantId;
   editForm.webSecret = row.webSecret;
-  editForm.siteB = row.siteB || undefined;
+  editForm.siteBId = row.siteBId || undefined;
   editForm.remark = row.remark;
   editForm.privateKey = row.privateKey;
   editForm.environment = row.environment;
@@ -435,88 +438,126 @@ function onLimit(row: ChannelAccountRow) {
   limitOpen.value = true;
 }
 
-function handleEditSave() {
+async function handleEditSave() {
   if (!editForm.accountNo.trim()) {
     message.warning('请输入通道账号');
     return;
   }
-  const row = mockAccountList.value.find((item) => item.id === editingId.value);
-  if (!row) {
+  if (!editForm.siteBId) {
+    message.warning('请选择B站');
+    return;
+  }
+  if (!editingId.value) {
     message.warning('账号不存在');
     return;
   }
   saving.value = true;
-  Object.assign(row, {
-    accountNo: editForm.accountNo.trim(),
-    alias: editForm.alias.trim(),
-    status: editForm.status === 1,
-    sort: editForm.sort,
-    appId: editForm.appId.trim(),
-    merchantId: editForm.merchantId.trim(),
-    webSecret: editForm.webSecret.trim(),
-    siteB: editForm.siteB || '',
-    remark: editForm.remark.trim(),
-    privateKey: editForm.privateKey.trim(),
-    environment: editForm.environment.trim(),
-    cannotOpenAt8: editForm.siteB === 'none',
-  });
-  saving.value = false;
-  editOpen.value = false;
-  message.success('已保存（静态，未接后端）');
+  try {
+    await updateChannelAccount(editingId.value, {
+      accountNo: editForm.accountNo.trim(),
+      alias: editForm.alias.trim(),
+      status: editForm.status === 1,
+      siteBId: editForm.siteBId,
+      sort: editForm.sort,
+      appId: editForm.appId.trim(),
+      merchantId: editForm.merchantId.trim(),
+      webSecret: editForm.webSecret.trim(),
+      privateKey: editForm.privateKey.trim(),
+      environment: editForm.environment.trim(),
+      remark: editForm.remark.trim(),
+    });
+    editOpen.value = false;
+    message.success('已保存');
+    await loadList();
+  } catch {
+    // 错误提示由 request 拦截器处理
+  } finally {
+    saving.value = false;
+  }
 }
 
-function handleLimitSave() {
-  const row = mockAccountList.value.find((item) => item.id === editingId.value);
-  if (!row) {
+async function handleLimitSave() {
+  if (!editingId.value) {
     message.warning('账号不存在');
     return;
   }
+  const interceptError = validateInterceptRange(
+    limitForm.interceptMin,
+    limitForm.interceptMax,
+  );
+  if (interceptError) {
+    message.warning(interceptError);
+    return;
+  }
+  const successError = validateAccountSuccessSetting(
+    limitForm.payFrequency,
+    limitForm.successCountLimit,
+  );
+  if (successError) {
+    message.warning(successError);
+    return;
+  }
   saving.value = true;
-  Object.assign(row, {
-    resetHour: limitForm.resetHour,
-    resetTimezone: '北京时间',
-    dailyAmountLimit: limitForm.dailyAmountLimit,
-    currencies: [...limitForm.currencies],
-    successCountLimit: limitForm.successCountLimit,
-    allowCountries: [...limitForm.allowCountries],
-    amountLimitMode: limitForm.amountLimitMode,
-    interceptMode: limitForm.amountLimitMode,
-    interceptMax: limitForm.interceptMax,
-    allowCardTypes: [...limitForm.allowCardTypes],
-    disableCardBrands: [...limitForm.disableCardBrands],
-    dailyOrderLimit: limitForm.dailyOrderLimit,
-    maxSuccessCount: limitForm.maxSuccessCount,
-    payFrequency: limitForm.payFrequency,
-    preferCountries: [...limitForm.preferCountries],
-    disableCountries: [...limitForm.disableCountries],
-    calcCurrency: limitForm.calcCurrency,
-    interceptCurrency: limitForm.calcCurrency,
-    interceptMin: limitForm.interceptMin,
-    disableCardTypes: [...limitForm.disableCardTypes],
-  });
-  saving.value = false;
-  limitOpen.value = false;
-  message.success('已保存（静态，未接后端）');
+  try {
+    await updateChannelAccountLimits(editingId.value, {
+      resetHour: limitForm.resetHour,
+      dailyAmountLimit: limitForm.dailyAmountLimit,
+      currencies: [...limitForm.currencies],
+      successCountLimit: limitForm.successCountLimit,
+      allowCountries: [...limitForm.allowCountries],
+      amountLimitMode: limitForm.amountLimitMode,
+      interceptMax: limitForm.interceptMax,
+      allowCardTypes: [...limitForm.allowCardTypes],
+      disableCardBrands: [...limitForm.disableCardBrands],
+      dailyOrderLimit: limitForm.dailyOrderLimit,
+      maxSuccessCount: limitForm.maxSuccessCount,
+      payFrequency: limitForm.payFrequency,
+      preferCountries: [...limitForm.preferCountries],
+      disableCountries: [...limitForm.disableCountries],
+      calcCurrency: limitForm.calcCurrency,
+      interceptMin: limitForm.interceptMin,
+      disableCardTypes: [...limitForm.disableCardTypes],
+    });
+    limitOpen.value = false;
+    message.success('已保存');
+    await loadList();
+  } catch {
+    // 错误提示由 request 拦截器处理
+  } finally {
+    saving.value = false;
+  }
 }
 
-function onToggleStatus(
+async function onToggleStatus(
   row: ChannelAccountRow,
   checked: boolean | number | string,
 ) {
-  row.status = Boolean(checked);
+  const status = Boolean(checked);
+  const prev = row.status;
+  row.status = status;
+  try {
+    await setChannelAccountStatus(row.id, status);
+  } catch {
+    row.status = prev;
+  }
 }
 
 function onBatchEdit() {
   message.info('批量修改暂未接入（静态页）');
 }
 
-onMounted(() => {
-  void loadConfigOptions();
+onMounted(async () => {
+  await Promise.all([
+    loadConfigOptions(),
+    loadChannelOptions(),
+    loadSiteBOptions(),
+  ]);
+  await loadList();
 });
 </script>
 
 <template>
-  <Page auto-content-height description="当前为静态预览，数据未接后端">
+  <Page auto-content-height description="通道账号">
     <template v-if="viewMode === 'list'">
       <Card class="mb-4" :bordered="false">
         <Form layout="inline" class="gap-y-3">
@@ -555,10 +596,13 @@ onMounted(() => {
           </FormItem>
           <FormItem label="支付方式">
             <Select
-              v-model:value="searchForm.paymentMethod"
-              :options="paymentFilterOptions"
+              v-model:value="searchForm.channelId"
+              :options="channelFilterOptions"
+              allow-clear
               class="w-36"
-              placeholder="支付方式"
+              option-filter-prop="label"
+              placeholder="请选择通道"
+              show-search
             />
           </FormItem>
           <FormItem label="添加时间">
@@ -642,10 +686,10 @@ onMounted(() => {
 
         <Table
           :columns="columns"
-          :data-source="filteredList"
+          :data-source="accountList"
           :loading="loading"
           :pagination="{ pageSize: 10, showSizeChanger: true }"
-          :scroll="{ x: 1800 }"
+          :scroll="{ x: 2140 }"
           row-key="id"
           size="small"
         >
@@ -787,6 +831,18 @@ onMounted(() => {
                 </Tag>
               </Space>
             </template>
+            <template v-else-if="column.key === 'updated'">
+              <div>{{ record.updatedBy }}</div>
+              <div class="text-muted-foreground text-xs">
+                {{ record.updatedAt }}
+              </div>
+            </template>
+            <template v-else-if="column.key === 'created'">
+              <div>{{ record.createdBy }}</div>
+              <div class="text-muted-foreground text-xs">
+                {{ record.createdAt }}
+              </div>
+            </template>
           </template>
         </Table>
       </Card>
@@ -797,8 +853,8 @@ onMounted(() => {
       <Form layout="vertical" class="max-w-md">
         <FormItem label="通道" required>
           <Select
-            v-model:value="step1Form.channel"
-            :options="CHANNEL_OPTIONS"
+            v-model:value="step1Form.channelId"
+            :options="channelOptions"
             placeholder="请选择一项"
             show-search
             option-filter-prop="label"
@@ -839,10 +895,10 @@ onMounted(() => {
               :options="STATUS_OPTIONS"
             />
           </FormItem>
-          <FormItem label="B站">
+          <FormItem label="B站" required>
             <Select
-              v-model:value="step2Form.siteB"
-              :options="SITE_B_OPTIONS"
+              v-model:value="step2Form.siteBId"
+              :options="siteBOptions"
               placeholder="请选择一个"
             />
           </FormItem>
@@ -974,11 +1030,10 @@ onMounted(() => {
           <FormItem label="状态">
             <Select v-model:value="editForm.status" :options="STATUS_OPTIONS" />
           </FormItem>
-          <FormItem label="B站">
+          <FormItem label="B站" required>
             <Select
-              v-model:value="editForm.siteB"
-              :options="SITE_B_OPTIONS"
-              allow-clear
+              v-model:value="editForm.siteBId"
+              :options="siteBOptions"
               placeholder="请选择一个"
             />
           </FormItem>
@@ -1013,7 +1068,7 @@ onMounted(() => {
               placeholder="请输入环境"
             />
           </FormItem>
-          <FormItem label="web秘钥(填1)">
+          <FormItem label="web秘钥">
             <Input
               v-model:value="editForm.webSecret"
               placeholder="请输入web秘钥"

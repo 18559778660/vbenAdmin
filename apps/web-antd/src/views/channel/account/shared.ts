@@ -116,7 +116,7 @@ export const mockAccountList = ref<ChannelAccountRow[]>([
     assignedUser: 'admin',
     totalReceived: 124_437.63,
     status: true,
-    resetTimezone: '北京时间',
+    resetTimezone: '北京重置时间',
     resetHour: 0,
     dailyOrderLimit: 0,
     dailyAmountLimit: 8000,
@@ -164,7 +164,7 @@ export const mockAccountList = ref<ChannelAccountRow[]>([
     assignedUser: 'ops01',
     totalReceived: 18_260.4,
     status: true,
-    resetTimezone: '北京时间',
+    resetTimezone: '北京重置时间',
     resetHour: 0,
     dailyOrderLimit: 20,
     dailyAmountLimit: 3000,
@@ -253,6 +253,21 @@ export function nextAccountIdValue() {
   const id = nextAccountId;
   nextAccountId += 1;
   return id;
+}
+
+export function validateAccountSuccessSetting(
+  payFrequency: number,
+  successCountLimit: number,
+) {
+  const hasFrequency = payFrequency > 0;
+  const hasCount = successCountLimit > 0;
+  if (hasFrequency && !hasCount) {
+    return '成功设置需同时配置指定时间内限制成功次数';
+  }
+  if (hasCount && !hasFrequency) {
+    return '成功设置需同时配置支付频率';
+  }
+  return null;
 }
 
 export function money(value: number) {
