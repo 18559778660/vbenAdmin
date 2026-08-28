@@ -29,16 +29,22 @@ import {
   getCountryOptions,
   getCurrencyOptions,
 } from '#/api/basic-config';
+import {
+  createChannelGroup,
+  getChannelGroupList,
+  updateChannelGroup,
+} from '#/api/channel-group';
 
 import { ACCOUNT_LIMIT_MODE_LABELS } from '../account/shared';
-import { CARD_BRAND_LABELS, COLLECT_RULE_LABELS, toOptions } from '../shared';
 import {
-  buildGroupGatewayUrl,
-  getGroupAccounts,
-  mockChannelGroupList,
+  CARD_BRAND_LABELS,
+  COLLECT_RULE_LABELS,
+  toOptions,
+  validateInterceptRange,
+  validateSuccessSetting,
+} from '../shared';
+import {
   money,
-  nextGroupIdValue,
-  nowText,
   PAYMENT_METHOD_FILTER_OPTIONS,
   remarkText,
   shipModeText,
@@ -92,8 +98,8 @@ const saving = ref(false);
 const formOpen = ref(false);
 const accountOpen = ref(false);
 const editingId = ref<null | number>(null);
-const viewingGroupId = ref<null | number>(null);
 const viewingGroupName = ref('');
+const list = ref<ChannelGroupRow[]>([]);
 
 const currencyOptions = ref<{ label: string; value: string }[]>([]);
 const countryOptions = ref<{ label: string; value: string }[]>([]);
@@ -155,26 +161,9 @@ const accountColumns = [
   { title: '备注', dataIndex: 'remark', key: 'remark', width: 120 },
 ];
 
-const filteredList = computed(() => {
-  return mockChannelGroupList.value.filter((row) => {
-    if (applied.id && row.id !== applied.id) return false;
-    if (applied.code && !row.code.includes(applied.code.trim())) return false;
-    return true;
-  });
-});
+const filteredList = computed(() => list.value);
 
-const filteredAccounts = computed(() => {
-  if (!viewingGroupId.value) return [];
-  return getGroupAccounts(viewingGroupId.value).filter((row) => {
-    if (
-      accountApplied.paymentMethod &&
-      row.paymentMethod !== accountApplied.paymentMethod
-    ) {
-      return false;
-    }
-    return true;
-  });
-});
+const filteredAccounts = computed(() => []);
 
 async function loadConfigOptions() {
   try {
@@ -196,9 +185,25 @@ async function loadConfigOptions() {
   }
 }
 
+async function loadList() {
+  loading.value = true;
+  try {
+    list.value = await getChannelGroupList({
+      id: applied.id,
+      code: applied.code.trim() || undefined,
+    });
+  } catch (error) {
+    list.value = [];
+    message.error(error instanceof Error ? error.message : '加载分组列表失败');
+  } finally {
+    loading.value = false;
+  }
+}
+
 function handleSearch() {
   applied.id = searchForm.id;
   applied.code = searchForm.code;
+  void loadList();
 }
 
 function resetSearch() {
@@ -208,11 +213,7 @@ function resetSearch() {
 }
 
 function handleRefresh() {
-  loading.value = true;
-  window.setTimeout(() => {
-    loading.value = false;
-    message.success('已刷新（静态数据）');
-  }, 200);
+  void loadList();
 }
 
 async function copyGatewayUrl(url: string) {
@@ -298,6 +299,12 @@ function buildFormPayload() {
   };
 }
 
+function buildUpdatePayload() {
+  const payload = buildFormPayload();
+  const { name: _name, code: _code, ...updatePayload } = payload;
+  return updatePayload;
+}
+
 function openCreate() {
   editingId.value = null;
   resetGroupForm();
@@ -310,51 +317,47 @@ function openEdit(row: ChannelGroupRow) {
   formOpen.value = true;
 }
 
-function handleFormSave() {
+async function handleFormSave() {
   if (!groupForm.name.trim() || !groupForm.code.trim()) {
     message.warning('请填写分组名和分组CODE');
     return;
   }
-  saving.value = true;
-  const timestamp = nowText();
-  const payload = buildFormPayload();
-  if (editingId.value) {
-    const row = mockChannelGroupList.value.find(
-      (item) => item.id === editingId.value,
-    );
-    if (!row) {
-      message.warning('分组不存在');
-      saving.value = false;
-      return;
-    }
-    const { name: _name, code: _code, ...editablePayload } = payload;
-    Object.assign(row, editablePayload, {
-      updatedAt: timestamp,
-      updatedBy: 'admin',
-    });
-  } else {
-    mockChannelGroupList.value.unshift({
-      id: nextGroupIdValue(),
-      ...payload,
-      totalAmount: 0,
-      balance: 0,
-      dailyRecvCount: 0,
-      dailyRecvAmount: 0,
-      availableAccountCount: 0,
-      gatewayUrl: buildGroupGatewayUrl(payload.code),
-      createdAt: timestamp,
-      createdBy: 'admin',
-      updatedAt: timestamp,
-      updatedBy: 'admin',
-    });
+  const rangeError = validateInterceptRange(
+    groupForm.interceptMin,
+    groupForm.interceptMax,
+  );
+  if (rangeError) {
+    message.warning(rangeError);
+    return;
   }
-  saving.value = false;
-  formOpen.value = false;
-  message.success('已保存（静态，未接后端）');
+  const successSettingError = validateSuccessSetting(
+    groupForm.payFrequencyDays,
+    groupForm.successLimitCount,
+    groupForm.failLimitCount,
+  );
+  if (successSettingError) {
+    message.warning(successSettingError);
+    return;
+  }
+  saving.value = true;
+  try {
+    if (editingId.value) {
+      await updateChannelGroup(editingId.value, buildUpdatePayload());
+      message.success('更新成功');
+    } else {
+      await createChannelGroup(buildFormPayload());
+      message.success('创建成功');
+    }
+    formOpen.value = false;
+    await loadList();
+  } catch (error) {
+    message.error(error instanceof Error ? error.message : '保存失败');
+  } finally {
+    saving.value = false;
+  }
 }
 
 function onViewAccounts(row: ChannelGroupRow) {
-  viewingGroupId.value = row.id;
   viewingGroupName.value = row.name;
   accountSearchForm.paymentMethod = '';
   accountApplied.paymentMethod = '';
@@ -372,11 +375,12 @@ function resetAccountSearch() {
 
 onMounted(() => {
   void loadConfigOptions();
+  void loadList();
 });
 </script>
 
 <template>
-  <Page auto-content-height description="当前为静态预览，数据未接后端">
+  <Page auto-content-height>
     <Card class="mb-4" :bordered="false">
       <Form layout="inline" class="gap-y-3">
         <FormItem label="ID">
