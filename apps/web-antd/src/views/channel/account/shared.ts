@@ -21,7 +21,7 @@ export type ChannelAccountRow = {
   disableCardTypes: string[];
   disableCountries: string[];
   environment: string;
-  groupName: string;
+  groupNames: string[];
   id: number;
   interceptCurrency: string;
   interceptMax: number;
@@ -63,15 +63,10 @@ export const PAYMENT_METHOD_LABELS: Record<string, string> = {
   antom: 'Antom',
 };
 
-export const GROUP_OPTIONS = [
-  { label: '全部', value: '' },
-  { label: '默认分组', value: 'default' },
-  { label: '高优先级', value: 'high' },
+export const ENVIRONMENT_OPTIONS = [
+  { label: 'live', value: 'live' },
+  { label: 'sandbox', value: 'sandbox' },
 ];
-
-export function groupLabel(value: string) {
-  return GROUP_OPTIONS.find((item) => item.value === value)?.label || value;
-}
 
 export const USER_OPTIONS = [
   { label: '全部', value: '' },
@@ -112,7 +107,7 @@ export const mockAccountList = ref<ChannelAccountRow[]>([
     alias: 'havetr.com',
     remark: '重新打开',
     paymentMethod: 'card',
-    groupName: 'default',
+    groupNames: ['default'],
     assignedUser: 'admin',
     totalReceived: 124_437.63,
     status: true,
@@ -160,7 +155,7 @@ export const mockAccountList = ref<ChannelAccountRow[]>([
     alias: 'antom备用',
     remark: '',
     paymentMethod: 'antom',
-    groupName: 'high',
+    groupNames: ['high'],
     assignedUser: 'ops01',
     totalReceived: 18_260.4,
     status: true,
@@ -206,7 +201,7 @@ export const mockAccountList = ref<ChannelAccountRow[]>([
     alias: 'stripe测试',
     remark: '已限额关闭',
     paymentMethod: 'card',
-    groupName: 'default',
+    groupNames: ['default'],
     assignedUser: 'none',
     totalReceived: 960.12,
     status: false,

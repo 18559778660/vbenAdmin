@@ -561,7 +561,11 @@ onMounted(async () => {
             }}
           </template>
           <template v-else-if="column.key === 'confirmEmail'">
-            <Switch v-model:checked="record.confirmEmail" size="small" />
+            <Switch
+              :checked="(record as MerchantApi.Merchant).confirmEmail"
+              disabled
+              size="small"
+            />
           </template>
           <template v-else-if="column.key === 'status'">
             <Switch
@@ -575,10 +579,12 @@ onMounted(async () => {
           </template>
           <template v-else-if="column.key === 'limitMode'">
             <Tag color="gold">
-{{
-              merchantLimitModeLabel((record as MerchantApi.Merchant).limitMode)
-            }}
-</Tag>
+              {{
+                merchantLimitModeLabel(
+                  (record as MerchantApi.Merchant).limitMode,
+                )
+              }}
+            </Tag>
           </template>
           <template v-else-if="column.key === 'secretKey'">
             <div class="flex min-w-0 items-center gap-1">

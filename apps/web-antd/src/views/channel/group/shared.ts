@@ -32,12 +32,16 @@ export type ChannelGroupRow = {
   updatedBy: string;
 };
 
-export const PAYMENT_METHOD_FILTER_OPTIONS = [
-  { label: '全部', value: '' },
-  { label: '信用卡', value: 'card' },
-  { label: 'PayPal', value: 'paypal' },
-  { label: 'Antom', value: 'antom' },
-];
+export type GroupAccountRow = {
+  accountStatus: boolean;
+  channel: string;
+  channelName: string;
+  id: number;
+  inGroup: boolean;
+  paymentMethod: string;
+  remark: string;
+  siteB: string;
+};
 
 export function money(value: number) {
   return value.toFixed(2);

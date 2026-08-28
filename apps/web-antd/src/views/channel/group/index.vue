@@ -1,5 +1,5 @@
 <script lang="ts" setup>
-import type { ChannelGroupRow } from './shared';
+import type { ChannelGroupRow, GroupAccountRow } from './shared';
 
 import { computed, onMounted, reactive, ref } from 'vue';
 
@@ -19,6 +19,7 @@ import {
   RadioGroup,
   Select,
   Space,
+  Switch,
   Table,
   Tag,
   Tooltip,
@@ -29,9 +30,12 @@ import {
   getCountryOptions,
   getCurrencyOptions,
 } from '#/api/basic-config';
+import { getChannelList } from '#/api/channel';
 import {
   createChannelGroup,
+  getChannelGroupAccounts,
   getChannelGroupList,
+  setChannelGroupAccountMembership,
   updateChannelGroup,
 } from '#/api/channel-group';
 
@@ -43,12 +47,7 @@ import {
   validateInterceptRange,
   validateSuccessSetting,
 } from '../shared';
-import {
-  money,
-  PAYMENT_METHOD_FILTER_OPTIONS,
-  remarkText,
-  shipModeText,
-} from './shared';
+import { money, remarkText, shipModeText } from './shared';
 
 defineOptions({ name: 'ChannelGroup' });
 
@@ -86,11 +85,11 @@ const groupForm = reactive({
 });
 
 const accountSearchForm = reactive({
-  paymentMethod: '',
+  channelId: undefined as number | undefined,
 });
 
 const accountApplied = reactive({
-  paymentMethod: '',
+  channelId: undefined as number | undefined,
 });
 
 const loading = ref(false);
@@ -98,12 +97,22 @@ const saving = ref(false);
 const formOpen = ref(false);
 const accountOpen = ref(false);
 const editingId = ref<null | number>(null);
+const viewingGroupId = ref<null | number>(null);
 const viewingGroupName = ref('');
 const list = ref<ChannelGroupRow[]>([]);
+const accountList = ref<GroupAccountRow[]>([]);
+const accountLoading = ref(false);
+const membershipSavingId = ref<null | number>(null);
 
 const currencyOptions = ref<{ label: string; value: string }[]>([]);
 const countryOptions = ref<{ label: string; value: string }[]>([]);
 const cardTypeOptions = ref<{ label: string; value: string }[]>([]);
+const channelOptions = ref<{ label: string; value: number }[]>([]);
+
+const channelFilterOptions = computed(() => [
+  { label: '全部', value: undefined },
+  ...channelOptions.value,
+]);
 
 const collectRuleOptions = toOptions(COLLECT_RULE_LABELS);
 const amountLimitModeOptions = Object.entries(ACCOUNT_LIMIT_MODE_LABELS).map(
@@ -154,7 +163,7 @@ const accountColumns = [
     key: 'channelName',
     width: 160,
   },
-  { title: '状态', dataIndex: 'status', key: 'status', width: 80 },
+  { title: '状态', key: 'inGroup', width: 80 },
   { title: '账号状态', key: 'accountStatus', width: 100 },
   { title: 'B站', dataIndex: 'siteB', key: 'siteB', width: 160 },
   { title: '通道', dataIndex: 'channel', key: 'channel', width: 140 },
@@ -163,7 +172,19 @@ const accountColumns = [
 
 const filteredList = computed(() => list.value);
 
-const filteredAccounts = computed(() => []);
+const filteredAccounts = computed(() => accountList.value);
+
+async function loadChannelOptions() {
+  try {
+    const rows = await getChannelList();
+    channelOptions.value = rows.map((row) => ({
+      label: row.name,
+      value: row.id,
+    }));
+  } catch {
+    channelOptions.value = [];
+  }
+}
 
 async function loadConfigOptions() {
   try {
@@ -358,23 +379,70 @@ async function handleFormSave() {
 }
 
 function onViewAccounts(row: ChannelGroupRow) {
+  viewingGroupId.value = row.id;
   viewingGroupName.value = row.name;
-  accountSearchForm.paymentMethod = '';
-  accountApplied.paymentMethod = '';
+  accountSearchForm.channelId = undefined;
+  accountApplied.channelId = undefined;
   accountOpen.value = true;
+  void loadGroupAccounts();
+}
+
+async function loadGroupAccounts() {
+  if (!viewingGroupId.value) {
+    accountList.value = [];
+    return;
+  }
+  accountLoading.value = true;
+  try {
+    accountList.value = await getChannelGroupAccounts(viewingGroupId.value, {
+      channelId: accountApplied.channelId,
+    });
+  } catch (error) {
+    accountList.value = [];
+    message.error(error instanceof Error ? error.message : '加载账号列表失败');
+  } finally {
+    accountLoading.value = false;
+  }
+}
+
+async function handleMembershipChange(
+  record: GroupAccountRow,
+  checked: boolean,
+) {
+  if (!viewingGroupId.value) {
+    return;
+  }
+  membershipSavingId.value = record.id;
+  try {
+    await setChannelGroupAccountMembership(
+      viewingGroupId.value,
+      record.id,
+      checked,
+    );
+    record.inGroup = checked;
+    message.success(checked ? '已归属当前分组' : '已移出当前分组');
+    await loadList();
+  } catch (error) {
+    message.error(error instanceof Error ? error.message : '操作失败');
+  } finally {
+    membershipSavingId.value = null;
+  }
 }
 
 function handleAccountSearch() {
-  accountApplied.paymentMethod = accountSearchForm.paymentMethod;
+  accountApplied.channelId = accountSearchForm.channelId;
+  void loadGroupAccounts();
 }
 
 function resetAccountSearch() {
-  accountSearchForm.paymentMethod = '';
-  accountApplied.paymentMethod = '';
+  accountSearchForm.channelId = undefined;
+  accountApplied.channelId = undefined;
+  void loadGroupAccounts();
 }
 
 onMounted(() => {
   void loadConfigOptions();
+  void loadChannelOptions();
   void loadList();
 });
 </script>
@@ -784,10 +852,13 @@ onMounted(() => {
       <Form layout="inline" class="mb-4 gap-y-3">
         <FormItem label="支付方式">
           <Select
-            v-model:value="accountSearchForm.paymentMethod"
-            :options="PAYMENT_METHOD_FILTER_OPTIONS"
+            v-model:value="accountSearchForm.channelId"
+            :options="channelFilterOptions"
+            allow-clear
             class="w-40"
-            placeholder="支付方式"
+            option-filter-prop="label"
+            placeholder="请选择通道"
+            show-search
           />
         </FormItem>
         <FormItem>
@@ -811,14 +882,22 @@ onMounted(() => {
       <Table
         :columns="accountColumns"
         :data-source="filteredAccounts"
+        :loading="accountLoading"
         :pagination="{ pageSize: 10, showSizeChanger: true }"
         :scroll="{ x: 900 }"
         row-key="id"
         size="small"
       >
         <template #bodyCell="{ column, record }">
-          <template v-if="column.key === 'status'">
-            {{ record.status || '' }}
+          <template v-if="column.key === 'inGroup'">
+            <Switch
+              :checked="record.inGroup"
+              :loading="membershipSavingId === record.id"
+              @change="
+                (checked) =>
+                  handleMembershipChange(record as GroupAccountRow, !!checked)
+              "
+            />
           </template>
           <template v-else-if="column.key === 'accountStatus'">
             <Tag :color="record.accountStatus ? 'green' : 'default'">

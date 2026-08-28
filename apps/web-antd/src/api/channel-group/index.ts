@@ -83,6 +83,21 @@ export namespace ChannelGroupApi {
     collectRule?: string;
     autoShip?: boolean;
   }
+
+  export interface GroupAccount {
+    id: number;
+    channelName: string;
+    inGroup: boolean;
+    accountStatus: boolean;
+    siteB: string;
+    channel: string;
+    remark: string;
+    paymentMethod: string;
+  }
+
+  export interface GroupAccountListParams {
+    channelId?: number;
+  }
 }
 
 export async function getChannelGroupList(params?: ChannelGroupApi.ListParams) {
@@ -105,5 +120,26 @@ export async function updateChannelGroup(
   return requestClient.put<ChannelGroupApi.ChannelGroup>(
     `/channel-groups/${id}`,
     data,
+  );
+}
+
+export async function getChannelGroupAccounts(
+  groupId: number,
+  params?: ChannelGroupApi.GroupAccountListParams,
+) {
+  return requestClient.get<ChannelGroupApi.GroupAccount[]>(
+    `/channel-groups/${groupId}/accounts`,
+    { params },
+  );
+}
+
+export async function setChannelGroupAccountMembership(
+  groupId: number,
+  accountId: number,
+  inGroup: boolean,
+) {
+  return requestClient.put(
+    `/channel-groups/${groupId}/accounts/${accountId}/membership`,
+    { inGroup },
   );
 }

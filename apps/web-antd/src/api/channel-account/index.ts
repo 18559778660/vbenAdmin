@@ -11,7 +11,7 @@ export namespace ChannelAccountApi {
     alias: string;
     remark: string;
     paymentMethod: string;
-    groupName: string;
+    groupNames: string[];
     assignedUser: string;
     totalReceived: number;
     status: boolean;
@@ -59,7 +59,7 @@ export namespace ChannelAccountApi {
     channelName?: string;
     alias?: string;
     remark?: string;
-    groupName?: string;
+    groupId?: number;
     assignedUser?: string;
     createdFrom?: string;
     createdTo?: string;

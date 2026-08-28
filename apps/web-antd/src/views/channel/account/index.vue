@@ -30,6 +30,7 @@ import {
   createChannelAccount,
   getCardTypeList,
   getChannelAccountList,
+  getChannelGroupList,
   getChannelList,
   getCountryOptions,
   getCurrencyOptions,
@@ -42,15 +43,14 @@ import {
 import {
   CARD_BRAND_LABELS,
   INTERCEPT_MODE_LABELS,
+  money,
   SUCCESS_MODE_LABELS,
   toOptions,
   validateInterceptRange,
 } from '../shared';
 import {
   ACCOUNT_LIMIT_MODE_LABELS,
-  GROUP_OPTIONS,
-  groupLabel,
-  money,
+  ENVIRONMENT_OPTIONS,
   RESET_HOUR_OPTIONS,
   STATUS_OPTIONS,
   USER_OPTIONS,
@@ -77,7 +77,7 @@ const searchForm = reactive({
   remark: '',
   channelId: undefined as number | undefined,
   createdRange: undefined as [Dayjs, Dayjs] | undefined,
-  groupName: '',
+  groupId: undefined as number | undefined,
   assignedUser: '',
 });
 
@@ -88,7 +88,7 @@ const applied = reactive({
   remark: '',
   channelId: undefined as number | undefined,
   createdRange: undefined as [Dayjs, Dayjs] | undefined,
-  groupName: '',
+  groupId: undefined as number | undefined,
   assignedUser: '',
   listFilter: '' as '' | 'closed8' | 'restricted' | 'unpaid',
 });
@@ -97,6 +97,7 @@ const loading = ref(false);
 const accountList = ref<ChannelAccountRow[]>([]);
 const channelOptions = ref<{ label: string; value: number }[]>([]);
 const siteBOptions = ref<{ label: string; value: number }[]>([]);
+const groupFilterOptions = ref<{ label: string; value: number }[]>([]);
 
 const step1Form = reactive({
   channelId: undefined as number | undefined,
@@ -238,6 +239,18 @@ async function loadSiteBOptions() {
   }
 }
 
+async function loadGroupFilterOptions() {
+  try {
+    const rows = await getChannelGroupList();
+    groupFilterOptions.value = rows.map((row) => ({
+      label: row.name,
+      value: row.id,
+    }));
+  } catch {
+    groupFilterOptions.value = [];
+  }
+}
+
 async function loadList() {
   loading.value = true;
   try {
@@ -247,7 +260,7 @@ async function loadList() {
       channelName: applied.name.trim() || undefined,
       alias: applied.alias.trim() || undefined,
       remark: applied.remark.trim() || undefined,
-      groupName: applied.groupName || undefined,
+      groupId: applied.groupId,
       assignedUser: applied.assignedUser || undefined,
       createdFrom: applied.createdRange?.[0]?.format('YYYY-MM-DD'),
       createdTo: applied.createdRange?.[1]?.format('YYYY-MM-DD'),
@@ -265,7 +278,7 @@ function handleSearch() {
   applied.remark = searchForm.remark;
   applied.channelId = searchForm.channelId;
   applied.createdRange = searchForm.createdRange;
-  applied.groupName = searchForm.groupName;
+  applied.groupId = searchForm.groupId;
   applied.assignedUser = searchForm.assignedUser;
   applied.listFilter = '';
   void loadList();
@@ -278,7 +291,7 @@ function resetSearch() {
   searchForm.remark = '';
   searchForm.channelId = undefined;
   searchForm.createdRange = undefined;
-  searchForm.groupName = '';
+  searchForm.groupId = undefined;
   searchForm.assignedUser = '';
   handleSearch();
 }
@@ -551,6 +564,7 @@ onMounted(async () => {
     loadConfigOptions(),
     loadChannelOptions(),
     loadSiteBOptions(),
+    loadGroupFilterOptions(),
   ]);
   await loadList();
 });
@@ -610,10 +624,13 @@ onMounted(async () => {
           </FormItem>
           <FormItem label="账号分组">
             <Select
-              v-model:value="searchForm.groupName"
-              :options="GROUP_OPTIONS"
+              v-model:value="searchForm.groupId"
+              :options="groupFilterOptions"
+              allow-clear
               class="w-36"
+              option-filter-prop="label"
               placeholder="账号分组"
+              show-search
             />
           </FormItem>
           <FormItem label="分配用户">
@@ -725,7 +742,11 @@ onMounted(async () => {
               </Space>
             </template>
             <template v-else-if="column.key === 'groupName'">
-              {{ groupLabel(record.groupName) }}
+              <div class="whitespace-pre-line leading-5">
+                {{
+                  record.groupNames?.length ? record.groupNames.join('\n') : '-'
+                }}
+              </div>
             </template>
             <template v-else-if="column.key === 'totalReceived'">
               {{ money(record.totalReceived) }}
@@ -1063,9 +1084,10 @@ onMounted(async () => {
             />
           </FormItem>
           <FormItem label="环境">
-            <Input
+            <Select
               v-model:value="editForm.environment"
-              placeholder="请输入环境"
+              :options="ENVIRONMENT_OPTIONS"
+              placeholder="请选择环境"
             />
           </FormItem>
           <FormItem label="web秘钥">
