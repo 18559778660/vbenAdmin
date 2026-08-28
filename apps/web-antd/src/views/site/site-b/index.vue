@@ -1,4 +1,6 @@
 <script lang="ts" setup>
+import type { SelectValue } from 'ant-design-vue/es/select';
+
 import type { SiteBGatewayRow } from './shared';
 
 import type { SiteBApi } from '#/api';
@@ -38,10 +40,14 @@ import {
   accountStatusText,
   channelText,
   DEFAULT_RUN_DIRECTORY,
+  domainHref,
+  EMPTY_LINK_ADDRESS,
+  formatLinkHost,
   FRAMEWORK_OPTIONS,
   FTP_OPTIONS,
   ftpLabel,
   getSiteGateways,
+  hasLinkAddressData,
   PAYMENT_MODE_COLORS,
   PAYMENT_MODE_LABELS,
   STATUS_FILTER_OPTIONS,
@@ -65,13 +71,16 @@ const createForm = reactive({
   host: '',
   account: '',
   password: '',
+  runDirectory: DEFAULT_RUN_DIRECTORY,
 });
 
 const loading = ref(false);
 const saving = ref(false);
 const selectedRowKeys = ref<number[]>([]);
 const list = ref<SiteBApi.SiteB[]>([]);
-const platformOptions = ref<{ label: string; value: number }[]>([]);
+const platformOptions = ref<{ code: string; label: string; value: number }[]>(
+  [],
+);
 
 const platformFilterOptions = computed(() => [
   { label: '全部', value: undefined },
@@ -117,7 +126,7 @@ const columns = [
     title: '链接地址',
     dataIndex: 'linkAddress',
     key: 'linkAddress',
-    width: 120,
+    minWidth: 200,
   },
   { title: '运行目录', key: 'runDirectory', width: 110 },
   { title: '备注', dataIndex: 'remark', key: 'remark', width: 220 },
@@ -150,10 +159,31 @@ async function loadPlatformOptions() {
     platformOptions.value = rows.map((row) => ({
       label: row.label,
       value: row.id,
+      code: row.code,
     }));
   } catch {
     platformOptions.value = [];
   }
+}
+
+function isStripePlatform(platformId?: number) {
+  if (!platformId) {
+    return false;
+  }
+  const platform = platformOptions.value.find(
+    (item) => item.value === platformId,
+  );
+  return platform?.code === 'stripe';
+}
+
+function syncRunDirectoryByPlatform(platformId?: number) {
+  createForm.runDirectory = isStripePlatform(platformId)
+    ? ''
+    : DEFAULT_RUN_DIRECTORY;
+}
+
+function onCreatePlatformChange(value: SelectValue) {
+  syncRunDirectoryByPlatform(typeof value === 'number' ? value : undefined);
 }
 
 async function loadList() {
@@ -192,6 +222,7 @@ function resetCreateForm() {
   createForm.host = '';
   createForm.account = '';
   createForm.password = '';
+  syncRunDirectoryByPlatform(createForm.platformId);
 }
 
 function openCreate() {
@@ -225,6 +256,9 @@ async function handleCreateSave() {
       host: createForm.host.trim(),
       account: createForm.account.trim(),
       password: createForm.password,
+      runDirectory: isStripePlatform(platformId)
+        ? createForm.runDirectory.trim()
+        : createForm.runDirectory.trim() || DEFAULT_RUN_DIRECTORY,
     });
     createOpen.value = false;
     message.success('已新增');
@@ -404,7 +438,7 @@ onMounted(async () => {
           selectedRowKeys,
           onChange: onSelectionChange,
         }"
-        :scroll="{ x: 1580 }"
+        :scroll="{ x: 'max-content' }"
         row-key="id"
         size="small"
       >
@@ -431,6 +465,18 @@ onMounted(async () => {
               </Tooltip>
             </Space>
           </template>
+          <template v-else-if="column.key === 'domain'">
+            <a
+              v-if="domainHref((record as SiteBApi.SiteB).domain)"
+              :href="domainHref((record as SiteBApi.SiteB).domain)"
+              class="text-primary whitespace-nowrap"
+              rel="noopener noreferrer"
+              target="_blank"
+            >
+              {{ (record as SiteBApi.SiteB).domain }}
+            </a>
+            <span v-else>{{ (record as SiteBApi.SiteB).domain }}</span>
+          </template>
           <template v-else-if="column.key === 'channel'">
             {{ channelText(record as SiteBApi.SiteB) }}
           </template>
@@ -442,6 +488,22 @@ onMounted(async () => {
                 (checked) => onToggleStatus(record as SiteBApi.SiteB, checked)
               "
             />
+          </template>
+          <template v-else-if="column.key === 'linkAddress'">
+            <template v-if="!hasLinkAddressData(record as SiteBApi.SiteB)">
+              <span class="whitespace-nowrap">{{ EMPTY_LINK_ADDRESS }}</span>
+            </template>
+            <div v-else class="leading-5">
+              <div class="whitespace-nowrap">
+                {{ formatLinkHost((record as SiteBApi.SiteB).host) }}
+              </div>
+              <div class="break-all">
+                {{ (record as SiteBApi.SiteB).account }}
+              </div>
+              <div class="break-all">
+                {{ (record as SiteBApi.SiteB).password }}
+              </div>
+            </div>
           </template>
           <template v-else-if="column.key === 'runDirectory'">
             <span v-if="record.runDirectory">{{ record.runDirectory }}</span>
@@ -481,6 +543,7 @@ onMounted(async () => {
             v-model:value="createForm.platformId"
             :options="platformOptions"
             placeholder="请选择一项"
+            @change="onCreatePlatformChange"
           />
         </FormItem>
         <FormItem label="框架">
@@ -513,7 +576,13 @@ onMounted(async () => {
           <div class="text-muted-foreground mt-1 text-xs">非必填，建议填写</div>
         </FormItem>
         <FormItem label="运行目录">
-          <Input :value="DEFAULT_RUN_DIRECTORY" disabled />
+          <Input
+            v-model:value="createForm.runDirectory"
+            placeholder="请输入运行目录"
+          />
+          <div class="text-muted-foreground mt-1 text-xs">
+            stripe系列清空其他通道默认填 [deal]
+          </div>
         </FormItem>
         <FormItem>
           <Space>

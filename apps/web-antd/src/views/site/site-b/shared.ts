@@ -104,6 +104,40 @@ export function ftpLabel(isFtp: boolean) {
   return isFtp ? '是' : '否';
 }
 
+export const EMPTY_LINK_ADDRESS = 'ftp://:@';
+
+export function formatLinkHost(host?: string) {
+  const value = host?.trim() ?? '';
+  if (!value) {
+    return '';
+  }
+  if (/^https:\/\//i.test(value)) {
+    return value;
+  }
+  if (/^http:\/\//i.test(value)) {
+    return `https://${value.slice(7)}`;
+  }
+  return `https://${value}`;
+}
+
+export function domainHref(domain?: string) {
+  const value = domain?.trim() ?? '';
+  if (!value) {
+    return '';
+  }
+  return /^https?:\/\//i.test(value) ? value : `https://${value}`;
+}
+
+export function hasLinkAddressData(row: {
+  account?: string;
+  host?: string;
+  password?: string;
+}) {
+  return Boolean(
+    row.host?.trim() || row.account?.trim() || row.password?.trim(),
+  );
+}
+
 export function getSiteGateways(siteId: number) {
   return mockSiteBGatewayList.value.filter((item) => item.siteId === siteId);
 }

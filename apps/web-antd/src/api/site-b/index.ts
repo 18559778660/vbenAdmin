@@ -40,6 +40,7 @@ export namespace SiteBApi {
     host?: string;
     account?: string;
     password?: string;
+    runDirectory?: string;
   }
 
   export interface UpdatePayload {
