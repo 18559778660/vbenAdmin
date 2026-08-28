@@ -1,5 +1,20 @@
 import { ref } from 'vue';
 
+const gatewayBaseURL =
+  (import.meta.env.VITE_GATEWAY_BASE_URL as string | undefined)?.replace(
+    /\/$/,
+    '',
+  ) || 'http://127.0.0.1:8080';
+
+/** 静态页生成分组网关地址，参数用 group 与通道列表区分。 */
+export function buildGroupGatewayUrl(code: string) {
+  const value = code.trim();
+  if (!value) {
+    return '';
+  }
+  return `${gatewayBaseURL}/api/gateway?group=${encodeURIComponent(value)}`;
+}
+
 export type ChannelGroupRow = {
   allowCardTypes: string[];
   allowCountries: string[];
@@ -18,7 +33,7 @@ export type ChannelGroupRow = {
   disableCardTypes: string[];
   disableCountries: string[];
   failLimitCount: number;
-  gateway: boolean;
+  gatewayUrl: string;
   id: number;
   interceptCurrency: string;
   interceptMax: number;
@@ -68,7 +83,7 @@ export const mockChannelGroupList = ref<ChannelGroupRow[]>([
     disableCardTypes: [] as string[],
     disableCardBrands: [] as string[],
     autoShip: true,
-    gateway: true,
+    gatewayUrl: buildGroupGatewayUrl('11st'),
     oldCustomerDays: 30,
     collectRule: 'random',
     payFrequencyDays: 1,
@@ -101,7 +116,7 @@ export const mockChannelGroupList = ref<ChannelGroupRow[]>([
     disableCardTypes: [] as string[],
     disableCardBrands: [] as string[],
     autoShip: true,
-    gateway: true,
+    gatewayUrl: buildGroupGatewayUrl('a75blik'),
     oldCustomerDays: 1,
     collectRule: 'random',
     payFrequencyDays: 1,
@@ -134,7 +149,7 @@ export const mockChannelGroupList = ref<ChannelGroupRow[]>([
     disableCardTypes: [],
     disableCardBrands: [],
     autoShip: true,
-    gateway: false,
+    gatewayUrl: buildGroupGatewayUrl('pp_card'),
     oldCustomerDays: 30,
     collectRule: 'round',
     payFrequencyDays: 0,
@@ -167,7 +182,7 @@ export const mockChannelGroupList = ref<ChannelGroupRow[]>([
     disableCardTypes: [],
     disableCardBrands: [],
     autoShip: false,
-    gateway: true,
+    gatewayUrl: buildGroupGatewayUrl('stripe_us'),
     oldCustomerDays: 7,
     collectRule: 'random',
     payFrequencyDays: 1,
@@ -272,6 +287,10 @@ export function remarkText(row: ChannelGroupRow) {
     return '无可用账号';
   }
   return `可用账号 【${row.availableAccountCount}】 个`;
+}
+
+export function shipModeText(autoShip: boolean) {
+  return autoShip ? '自动发货' : '手动发货';
 }
 
 export function getGroupAccounts(groupId: number) {

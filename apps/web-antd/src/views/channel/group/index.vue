@@ -33,6 +33,7 @@ import {
 import { ACCOUNT_LIMIT_MODE_LABELS } from '../account/shared';
 import { CARD_BRAND_LABELS, COLLECT_RULE_LABELS, toOptions } from '../shared';
 import {
+  buildGroupGatewayUrl,
   getGroupAccounts,
   mockChannelGroupList,
   money,
@@ -40,6 +41,7 @@ import {
   nowText,
   PAYMENT_METHOD_FILTER_OPTIONS,
   remarkText,
+  shipModeText,
 } from './shared';
 
 defineOptions({ name: 'ChannelGroup' });
@@ -130,11 +132,12 @@ const columns = [
   },
   { title: '成功设置', key: 'successSetting', width: 140 },
   { title: '拦截设置', key: 'intercept', width: 200 },
+  { title: '网关', key: 'gateway', width: 120 },
+  { title: '禁用国家', key: 'disableCountries', width: 120 },
+  { title: '发货模式', key: 'autoShip', width: 100 },
   { title: '备注', key: 'remark', width: 180 },
-  { title: '创建时间', dataIndex: 'createdAt', key: 'createdAt', width: 170 },
-  { title: '创建人', dataIndex: 'createdBy', key: 'createdBy', width: 100 },
-  { title: '操作时间', dataIndex: 'updatedAt', key: 'updatedAt', width: 170 },
-  { title: '操作人', dataIndex: 'updatedBy', key: 'updatedBy', width: 100 },
+  { title: '更新', key: 'updated', width: 170 },
+  { title: '创建', key: 'created', width: 170 },
 ];
 
 const accountColumns = [
@@ -210,6 +213,18 @@ function handleRefresh() {
     loading.value = false;
     message.success('已刷新（静态数据）');
   }, 200);
+}
+
+async function copyGatewayUrl(url: string) {
+  if (!url) {
+    return;
+  }
+  try {
+    await navigator.clipboard.writeText(url);
+    message.success('网关地址已复制');
+  } catch {
+    message.error('复制失败，请手动复制');
+  }
 }
 
 function resetGroupForm() {
@@ -326,7 +341,7 @@ function handleFormSave() {
       dailyRecvCount: 0,
       dailyRecvAmount: 0,
       availableAccountCount: 0,
-      gateway: true,
+      gatewayUrl: buildGroupGatewayUrl(payload.code),
       createdAt: timestamp,
       createdBy: 'admin',
       updatedAt: timestamp,
@@ -423,7 +438,7 @@ onMounted(() => {
         :data-source="filteredList"
         :loading="loading"
         :pagination="{ pageSize: 10, showSizeChanger: true }"
-        :scroll="{ x: 1900 }"
+        :scroll="{ x: 2000 }"
         row-key="id"
         size="small"
       >
@@ -519,6 +534,42 @@ onMounted(() => {
             >
               {{ remarkText(record as ChannelGroupRow) }}
             </span>
+          </template>
+          <template v-else-if="column.key === 'gateway'">
+            <Tooltip v-if="record.gatewayUrl" :title="record.gatewayUrl">
+              <Button
+                class="px-0"
+                size="small"
+                type="link"
+                @click="copyGatewayUrl(record.gatewayUrl)"
+              >
+                网关
+                <IconifyIcon class="ml-1 size-3.5" icon="lucide:copy" />
+              </Button>
+            </Tooltip>
+            <span v-else class="text-muted-foreground">-</span>
+          </template>
+          <template v-else-if="column.key === 'disableCountries'">
+            <Space wrap size="small">
+              <Tag v-for="code in record.disableCountries" :key="code">
+                {{ code }}
+              </Tag>
+            </Space>
+          </template>
+          <template v-else-if="column.key === 'autoShip'">
+            {{ shipModeText(record.autoShip) }}
+          </template>
+          <template v-else-if="column.key === 'updated'">
+            <div>{{ record.updatedBy }}</div>
+            <div class="text-muted-foreground text-xs">
+              {{ record.updatedAt }}
+            </div>
+          </template>
+          <template v-else-if="column.key === 'created'">
+            <div>{{ record.createdBy }}</div>
+            <div class="text-muted-foreground text-xs">
+              {{ record.createdAt }}
+            </div>
           </template>
         </template>
       </Table>
