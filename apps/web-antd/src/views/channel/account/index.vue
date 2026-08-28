@@ -28,6 +28,7 @@ import {
 
 import {
   createChannelAccount,
+  getAssignUserList,
   getCardTypeList,
   getChannelAccountList,
   getChannelGroupList,
@@ -53,7 +54,6 @@ import {
   ENVIRONMENT_OPTIONS,
   RESET_HOUR_OPTIONS,
   STATUS_OPTIONS,
-  USER_OPTIONS,
   validateAccountSuccessSetting,
 } from './shared';
 
@@ -78,7 +78,7 @@ const searchForm = reactive({
   channelId: undefined as number | undefined,
   createdRange: undefined as [Dayjs, Dayjs] | undefined,
   groupId: undefined as number | undefined,
-  assignedUser: '',
+  assignedUserId: undefined as number | undefined,
 });
 
 const applied = reactive({
@@ -89,7 +89,7 @@ const applied = reactive({
   channelId: undefined as number | undefined,
   createdRange: undefined as [Dayjs, Dayjs] | undefined,
   groupId: undefined as number | undefined,
-  assignedUser: '',
+  assignedUserId: undefined as number | undefined,
   listFilter: '' as '' | 'closed8' | 'restricted' | 'unpaid',
 });
 
@@ -98,6 +98,9 @@ const accountList = ref<ChannelAccountRow[]>([]);
 const channelOptions = ref<{ label: string; value: number }[]>([]);
 const siteBOptions = ref<{ label: string; value: number }[]>([]);
 const groupFilterOptions = ref<{ label: string; value: number }[]>([]);
+const assignUserFilterOptions = ref<
+  { label: string; value: number | undefined }[]
+>([{ label: '全部', value: undefined }]);
 
 const step1Form = reactive({
   channelId: undefined as number | undefined,
@@ -239,6 +242,21 @@ async function loadSiteBOptions() {
   }
 }
 
+async function loadAssignUserFilterOptions() {
+  try {
+    const rows = await getAssignUserList();
+    assignUserFilterOptions.value = [
+      { label: '全部', value: undefined },
+      ...rows.map((row) => ({
+        label: row.username,
+        value: row.id,
+      })),
+    ];
+  } catch {
+    assignUserFilterOptions.value = [{ label: '全部', value: undefined }];
+  }
+}
+
 async function loadGroupFilterOptions() {
   try {
     const rows = await getChannelGroupList();
@@ -261,7 +279,7 @@ async function loadList() {
       alias: applied.alias.trim() || undefined,
       remark: applied.remark.trim() || undefined,
       groupId: applied.groupId,
-      assignedUser: applied.assignedUser || undefined,
+      assignedUserId: applied.assignedUserId,
       createdFrom: applied.createdRange?.[0]?.format('YYYY-MM-DD'),
       createdTo: applied.createdRange?.[1]?.format('YYYY-MM-DD'),
       listFilter: applied.listFilter || undefined,
@@ -279,7 +297,7 @@ function handleSearch() {
   applied.channelId = searchForm.channelId;
   applied.createdRange = searchForm.createdRange;
   applied.groupId = searchForm.groupId;
-  applied.assignedUser = searchForm.assignedUser;
+  applied.assignedUserId = searchForm.assignedUserId;
   applied.listFilter = '';
   void loadList();
 }
@@ -292,7 +310,7 @@ function resetSearch() {
   searchForm.channelId = undefined;
   searchForm.createdRange = undefined;
   searchForm.groupId = undefined;
-  searchForm.assignedUser = '';
+  searchForm.assignedUserId = undefined;
   handleSearch();
 }
 
@@ -565,6 +583,7 @@ onMounted(async () => {
     loadChannelOptions(),
     loadSiteBOptions(),
     loadGroupFilterOptions(),
+    loadAssignUserFilterOptions(),
   ]);
   await loadList();
 });
@@ -635,10 +654,13 @@ onMounted(async () => {
           </FormItem>
           <FormItem label="分配用户">
             <Select
-              v-model:value="searchForm.assignedUser"
-              :options="USER_OPTIONS"
+              v-model:value="searchForm.assignedUserId"
+              :options="assignUserFilterOptions"
+              allow-clear
               class="w-36"
+              option-filter-prop="label"
               placeholder="分配用户"
+              show-search
             />
           </FormItem>
           <FormItem>

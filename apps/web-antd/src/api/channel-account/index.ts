@@ -60,7 +60,7 @@ export namespace ChannelAccountApi {
     alias?: string;
     remark?: string;
     groupId?: number;
-    assignedUser?: string;
+    assignedUserId?: number;
     createdFrom?: string;
     createdTo?: string;
     listFilter?: '' | 'closed8' | 'restricted' | 'unpaid';

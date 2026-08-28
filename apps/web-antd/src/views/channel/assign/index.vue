@@ -1,7 +1,7 @@
 <script lang="ts" setup>
 import type { AssignedAccountRow, AssignUserRow } from './shared';
 
-import { computed, reactive, ref } from 'vue';
+import { computed, onMounted, reactive, ref } from 'vue';
 
 import { Page } from '@vben/common-ui';
 import { IconifyIcon } from '@vben/icons';
@@ -23,14 +23,15 @@ import {
   Tooltip,
 } from 'ant-design-vue';
 
+import { getChannelList } from '#/api/channel';
 import {
-  getUserAccounts,
-  mockAssignUserList,
-  nextUserIdValue,
-  PAYMENT_METHOD_FILTER_OPTIONS,
-  remarkText,
-  SEARCH_FIELD_OPTIONS,
-} from './shared';
+  createAssignUser,
+  getAssignUserAccounts,
+  getAssignUserList,
+  setAssignUserAccountAssignment,
+} from '#/api/channel-assign';
+
+import { remarkText, SEARCH_FIELD_OPTIONS } from './shared';
 
 defineOptions({ name: 'ChannelAssign' });
 
@@ -51,11 +52,11 @@ const createForm = reactive({
 });
 
 const accountSearchForm = reactive({
-  paymentMethod: '',
+  channelId: undefined as number | undefined,
 });
 
 const accountApplied = reactive({
-  paymentMethod: '',
+  channelId: undefined as number | undefined,
 });
 
 const loading = ref(false);
@@ -63,7 +64,17 @@ const saving = ref(false);
 const createOpen = ref(false);
 const accountOpen = ref(false);
 const viewingUserId = ref<null | number>(null);
-const selectedAccountKeys = ref<number[]>([]);
+const list = ref<AssignUserRow[]>([]);
+const accountList = ref<AssignedAccountRow[]>([]);
+const accountLoading = ref(false);
+const assignmentSavingId = ref<null | number>(null);
+
+const channelOptions = ref<{ label: string; value: number }[]>([]);
+
+const channelFilterOptions = computed(() => [
+  { label: '全部', value: undefined },
+  ...channelOptions.value,
+]);
 
 const columns = [
   {
@@ -85,40 +96,48 @@ const accountColumns = [
     key: 'channelName',
     width: 160,
   },
-  { title: '状态', dataIndex: 'status', key: 'status', width: 80 },
+  { title: '状态', key: 'assigned', width: 80 },
   { title: '账号状态', key: 'accountStatus', width: 100 },
   { title: 'B站', dataIndex: 'siteB', key: 'siteB', width: 160 },
   { title: '通道', dataIndex: 'channel', key: 'channel', width: 140 },
   { title: '备注', dataIndex: 'remark', key: 'remark', width: 120 },
 ];
 
-const filteredList = computed(() => {
-  return mockAssignUserList.value.filter((row) => {
-    const keyword = applied.keyword.trim();
-    if (!keyword) return true;
-    if (applied.field === 'nickname') {
-      return row.nickname.includes(keyword);
-    }
-    return row.username.includes(keyword);
-  });
-});
+const filteredList = computed(() => list.value);
 
-const filteredAccounts = computed(() => {
-  if (!viewingUserId.value) return [];
-  return getUserAccounts(viewingUserId.value).filter((row) => {
-    if (
-      accountApplied.paymentMethod &&
-      row.paymentMethod !== accountApplied.paymentMethod
-    ) {
-      return false;
-    }
-    return true;
-  });
-});
+const filteredAccounts = computed(() => accountList.value);
+
+async function loadChannelOptions() {
+  try {
+    const rows = await getChannelList();
+    channelOptions.value = rows.map((row) => ({
+      label: row.name,
+      value: row.id,
+    }));
+  } catch {
+    channelOptions.value = [];
+  }
+}
+
+async function loadList() {
+  loading.value = true;
+  try {
+    list.value = await getAssignUserList({
+      field: applied.field,
+      keyword: applied.keyword.trim() || undefined,
+    });
+  } catch (error) {
+    list.value = [];
+    message.error(error instanceof Error ? error.message : '加载列表失败');
+  } finally {
+    loading.value = false;
+  }
+}
 
 function handleSearch() {
   applied.field = searchForm.field;
   applied.keyword = searchForm.keyword;
+  void loadList();
 }
 
 function resetSearch() {
@@ -160,51 +179,91 @@ function validateCreateForm() {
   return true;
 }
 
-function handleCreateSave() {
+async function handleCreateSave() {
   if (!validateCreateForm()) return;
   saving.value = true;
-  mockAssignUserList.value.unshift({
-    id: nextUserIdValue(),
-    username: createForm.username.trim(),
-    nickname: createForm.nickname.trim() || createForm.username.trim(),
-    assignedCount: 0,
-  });
-  saving.value = false;
-  createOpen.value = false;
-  message.success('已新增（静态，未接后端）');
+  try {
+    await createAssignUser({
+      username: createForm.username.trim(),
+      nickname: createForm.nickname.trim() || undefined,
+      password: createForm.password,
+    });
+    createOpen.value = false;
+    message.success('已新增');
+    await loadList();
+  } catch (error) {
+    message.error(error instanceof Error ? error.message : '新增失败');
+  } finally {
+    saving.value = false;
+  }
 }
 
 function onViewAccounts(row: AssignUserRow) {
   viewingUserId.value = row.id;
-  accountSearchForm.paymentMethod = '';
-  accountApplied.paymentMethod = '';
-  selectedAccountKeys.value = [];
+  accountSearchForm.channelId = undefined;
+  accountApplied.channelId = undefined;
   accountOpen.value = true;
+  void loadAssignAccounts();
 }
 
-function onToggleAccountStatus(
-  row: AssignedAccountRow,
-  checked: boolean | number | string,
+async function loadAssignAccounts() {
+  if (!viewingUserId.value) return;
+  accountLoading.value = true;
+  try {
+    accountList.value = await getAssignUserAccounts(viewingUserId.value, {
+      channelId: accountApplied.channelId,
+    });
+  } catch (error) {
+    accountList.value = [];
+    message.error(error instanceof Error ? error.message : '加载账号列表失败');
+  } finally {
+    accountLoading.value = false;
+  }
+}
+
+async function handleAssignmentChange(
+  record: AssignedAccountRow,
+  checked: boolean,
 ) {
-  row.status = Boolean(checked);
-}
-
-function onAccountSelectionChange(keys: (number | string)[]) {
-  selectedAccountKeys.value = keys.map(Number);
+  if (!viewingUserId.value) {
+    return;
+  }
+  assignmentSavingId.value = record.id;
+  try {
+    await setAssignUserAccountAssignment(
+      viewingUserId.value,
+      record.id,
+      checked,
+    );
+    record.assigned = checked;
+    message.success(checked ? '已分配给当前子账号' : '已取消分配');
+    await loadList();
+  } catch (error) {
+    message.error(error instanceof Error ? error.message : '操作失败');
+  } finally {
+    assignmentSavingId.value = null;
+  }
 }
 
 function handleAccountSearch() {
-  accountApplied.paymentMethod = accountSearchForm.paymentMethod;
+  accountApplied.channelId = accountSearchForm.channelId;
+  void loadAssignAccounts();
 }
 
 function resetAccountSearch() {
-  accountSearchForm.paymentMethod = '';
-  accountApplied.paymentMethod = '';
+  accountSearchForm.channelId = undefined;
+  accountApplied.channelId = undefined;
+  void loadAssignAccounts();
 }
+
+onMounted(() => {
+  void loadChannelOptions();
+  void loadList();
+});
 </script>
 
 <template>
-  <Page auto-content-height description="当前为静态预览，数据未接后端">
+  <Page auto-content-height>
     <Card class="mb-4" :bordered="false">
       <Form layout="inline" class="gap-y-3">
         <FormItem>
@@ -337,12 +396,13 @@ function resetAccountSearch() {
       width="1100px"
     >
       <Form layout="inline" class="mb-4 gap-y-3">
-        <FormItem label="支付方式">
+        <FormItem label="通道">
           <Select
-            v-model:value="accountSearchForm.paymentMethod"
-            :options="PAYMENT_METHOD_FILTER_OPTIONS"
-            class="w-40"
-            placeholder="支付方式"
+            v-model:value="accountSearchForm.channelId"
+            :options="channelFilterOptions"
+            allow-clear
+            class="w-48"
+            placeholder="通道"
           />
         </FormItem>
         <FormItem>
@@ -366,23 +426,24 @@ function resetAccountSearch() {
       <Table
         :columns="accountColumns"
         :data-source="filteredAccounts"
+        :loading="accountLoading"
         :pagination="{ pageSize: 10, showSizeChanger: true }"
-        :row-selection="{
-          selectedRowKeys: selectedAccountKeys,
-          onChange: onAccountSelectionChange,
-        }"
         :scroll="{ x: 980 }"
         row-key="id"
         size="small"
       >
         <template #bodyCell="{ column, record }">
-          <template v-if="column.key === 'status'">
+          <template v-if="column.key === 'assigned'">
             <Switch
-              :checked="record.status"
+              :checked="record.assigned"
+              :loading="assignmentSavingId === record.id"
               size="small"
               @change="
                 (checked) =>
-                  onToggleAccountStatus(record as AssignedAccountRow, checked)
+                  handleAssignmentChange(
+                    record as AssignedAccountRow,
+                    Boolean(checked),
+                  )
               "
             />
           </template>

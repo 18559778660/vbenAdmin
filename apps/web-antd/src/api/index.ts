@@ -1,6 +1,7 @@
 export * from './basic-config';
 export * from './channel';
 export * from './channel-account';
+export * from './channel-assign';
 export * from './channel-group';
 export * from './core';
 export * from './merchant';
