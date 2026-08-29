@@ -1,7 +1,7 @@
 <script lang="ts" setup>
 import type { StripeWordBankRow } from './shared';
 
-import { computed, reactive, ref } from 'vue';
+import { computed, onMounted, reactive, ref } from 'vue';
 
 import { Page } from '@vben/common-ui';
 import { IconifyIcon } from '@vben/icons';
@@ -22,10 +22,13 @@ import {
 } from 'ant-design-vue';
 
 import {
-  CONFIG_ITEM_OPTIONS,
-  mockStripeWordBankList,
-  nextWordBankIdValue,
-} from './shared';
+  createStripeWordBank,
+  deleteStripeWordBank,
+  getStripeWordBankList,
+  updateStripeWordBank,
+} from '#/api/stripe-wordbank';
+
+import { CONFIG_ITEM_OPTIONS } from './shared';
 
 defineOptions({ name: 'StripeWordBank' });
 
@@ -39,6 +42,7 @@ const saving = ref(false);
 const modalOpen = ref(false);
 const editingId = ref<null | number>(null);
 const selectedRowKeys = ref<number[]>([]);
+const list = ref<StripeWordBankRow[]>([]);
 
 const modalTitle = computed(() => (editingId.value ? '编辑' : '新增'));
 const isEditing = computed(() => editingId.value !== null);
@@ -81,6 +85,18 @@ const columns = [
   },
 ];
 
+async function loadList() {
+  loading.value = true;
+  try {
+    list.value = await getStripeWordBankList();
+  } catch (error) {
+    list.value = [];
+    message.error(error instanceof Error ? error.message : '加载列表失败');
+  } finally {
+    loading.value = false;
+  }
+}
+
 function resetForm() {
   form.name = '';
   form.configItem = 'webhook链接';
@@ -100,71 +116,74 @@ function openEdit(row: StripeWordBankRow) {
 }
 
 function validateForm() {
-  if (isEditing.value) {
-    return true;
-  }
-  if (!form.name.trim()) {
+  const name = form.name.trim();
+  if (!isEditing.value && !name) {
     message.warning('请输入名称');
     return false;
   }
-  if (!form.name.trim().startsWith('/')) {
-    message.warning('名称建议以 / 开头');
+  if (form.configItem === '目录') {
+    if (name.startsWith('/')) {
+      message.warning('目录类名称不能以 / 开头');
+      return false;
+    }
+  } else if (!name.startsWith('/')) {
+    message.warning('路径类名称需以 / 开头');
     return false;
   }
   return true;
 }
 
-function handleSave() {
+async function handleSave() {
   if (!validateForm()) return;
   saving.value = true;
-  if (editingId.value) {
-    const row = mockStripeWordBankList.value.find(
-      (item) => item.id === editingId.value,
-    );
-    if (row) {
-      row.configItem = form.configItem;
+  try {
+    if (editingId.value) {
+      await updateStripeWordBank(editingId.value, {
+        configItem: form.configItem,
+      });
+      message.success('已保存');
+    } else {
+      await createStripeWordBank({
+        name: form.name.trim(),
+        configItem: form.configItem,
+      });
+      message.success('已新增');
     }
-    message.success('已保存（静态，未接后端）');
-  } else {
-    mockStripeWordBankList.value.unshift({
-      id: nextWordBankIdValue(),
-      name: form.name.trim(),
-      usageCount: 0,
-      configItem: form.configItem,
-    });
-    message.success('已新增（静态，未接后端）');
+    modalOpen.value = false;
+    await loadList();
+  } catch {
+    // 错误提示由 request 拦截器处理
+  } finally {
+    saving.value = false;
   }
-  saving.value = false;
-  modalOpen.value = false;
 }
 
-function handleDelete(row: StripeWordBankRow) {
-  mockStripeWordBankList.value = mockStripeWordBankList.value.filter(
-    (item) => item.id !== row.id,
-  );
-  selectedRowKeys.value = selectedRowKeys.value.filter((id) => id !== row.id);
-  message.success('已删除（静态，未接后端）');
-}
-
-function handleRefresh() {
-  loading.value = true;
-  window.setTimeout(() => {
-    loading.value = false;
-    message.success('已刷新（静态数据）');
-  }, 300);
+async function handleDelete(row: StripeWordBankRow) {
+  try {
+    await deleteStripeWordBank(row.id);
+    selectedRowKeys.value = selectedRowKeys.value.filter((id) => id !== row.id);
+    message.success('已删除');
+    await loadList();
+  } catch {
+    // 错误提示由 request 拦截器处理
+  }
 }
 
 function onSelectionChange(keys: (number | string)[]) {
   selectedRowKeys.value = keys.map(Number);
 }
+
+onMounted(() => {
+  void loadList();
+});
 </script>
 
 <template>
-  <Page auto-content-height description="STRIPE 路径库 · 当前为静态预览">
+  <Page auto-content-height description="STRIPE 路径库">
     <Card :bordered="false">
       <div class="mb-4">
         <Space wrap>
-          <Button @click="handleRefresh">
+          <Button :loading="loading" @click="loadList">
             <template #icon>
               <IconifyIcon icon="lucide:rotate-cw" />
             </template>
@@ -181,7 +200,7 @@ function onSelectionChange(keys: (number | string)[]) {
 
       <Table
         :columns="columns"
-        :data-source="mockStripeWordBankList"
+        :data-source="list"
         :loading="loading"
         :pagination="{ pageSize: 10, showSizeChanger: true }"
         :row-selection="{
