@@ -1,13 +1,11 @@
-import { ref } from 'vue';
-
 export type SiteBGatewayRow = {
   accountBound: boolean;
   accountEnabled: boolean;
   channelName: string;
+  gatewayUrl: string;
   id: number;
   paymentMode: 'checkout' | 'embedded' | 'local';
   remark: string;
-  siteId: number;
   status: boolean;
 };
 
@@ -33,7 +31,7 @@ export function accountStatusText(row: SiteBGatewayRow) {
   if (!row.accountBound) {
     return '未绑定账号';
   }
-  return `已绑定账号 | ${row.accountEnabled ? '启用' : '禁用'}`;
+  return `已绑定账号 | ${row.accountEnabled ? '启用' : '停用'}`;
 }
 
 export function accountStatusClass(row: SiteBGatewayRow) {
@@ -61,40 +59,6 @@ export const FTP_OPTIONS = [
 ];
 
 export const DEFAULT_RUN_DIRECTORY = 'deal';
-
-/** 网关列表仍为静态 mock，后续接通道绑定后再改 */
-export const mockSiteBGatewayList = ref<SiteBGatewayRow[]>([
-  {
-    id: 1,
-    siteId: 1,
-    channelName: 'stripe_card',
-    status: true,
-    accountBound: false,
-    accountEnabled: false,
-    paymentMode: 'local',
-    remark: '',
-  },
-  {
-    id: 2,
-    siteId: 1,
-    channelName: 'jh_stripe',
-    status: true,
-    accountBound: false,
-    accountEnabled: false,
-    paymentMode: 'embedded',
-    remark: '',
-  },
-  {
-    id: 3,
-    siteId: 1,
-    channelName: 'stripe',
-    status: true,
-    accountBound: true,
-    accountEnabled: true,
-    paymentMode: 'checkout',
-    remark: '',
-  },
-]);
 
 export function channelText(row: { channel: string; channelEnabled: boolean }) {
   return `${row.channel} | ${row.channelEnabled ? '启用' : '停用'}`;
@@ -136,8 +100,4 @@ export function hasLinkAddressData(row: {
   return Boolean(
     row.host?.trim() || row.account?.trim() || row.password?.trim(),
   );
-}
-
-export function getSiteGateways(siteId: number) {
-  return mockSiteBGatewayList.value.filter((item) => item.siteId === siteId);
 }

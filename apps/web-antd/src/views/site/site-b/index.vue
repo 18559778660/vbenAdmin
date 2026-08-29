@@ -30,6 +30,7 @@ import {
 import {
   createSiteB,
   getChannelPlatformOptions,
+  getSiteBGateways,
   getSiteBList,
   setSiteBStatus,
   updateSiteB,
@@ -46,7 +47,6 @@ import {
   FRAMEWORK_OPTIONS,
   FTP_OPTIONS,
   ftpLabel,
-  getSiteGateways,
   hasLinkAddressData,
   PAYMENT_MODE_COLORS,
   PAYMENT_MODE_LABELS,
@@ -90,8 +90,9 @@ const platformFilterOptions = computed(() => [
 const createOpen = ref(false);
 const editOpen = ref(false);
 const gatewayOpen = ref(false);
+const gatewayLoading = ref(false);
+const gatewayList = ref<SiteBGatewayRow[]>([]);
 const editingId = ref<null | number>(null);
-const viewingSiteId = ref<null | number>(null);
 const viewingDomain = ref('');
 
 const editForm = reactive({
@@ -148,10 +149,16 @@ const gatewayColumns = [
   { title: '网关', key: 'gateway', width: 90 },
 ];
 
-const gatewayList = computed(() => {
-  if (!viewingSiteId.value) return [];
-  return getSiteGateways(viewingSiteId.value);
-});
+async function loadGatewayList(siteId: number) {
+  gatewayLoading.value = true;
+  try {
+    gatewayList.value = await getSiteBGateways(siteId);
+  } catch {
+    gatewayList.value = [];
+  } finally {
+    gatewayLoading.value = false;
+  }
+}
 
 async function loadPlatformOptions() {
   try {
@@ -299,13 +306,14 @@ function onUpdateCode() {
 }
 
 function openGatewayList(row: SiteBApi.SiteB) {
-  viewingSiteId.value = row.id;
   viewingDomain.value = row.domain;
   gatewayOpen.value = true;
+  void loadGatewayList(row.id);
 }
 
-function onGatewayAction() {
-  message.info('网关配置暂未接入');
+async function copyGatewayUrl(url: string) {
+  await navigator.clipboard.writeText(url);
+  message.success('已复制网关地址');
 }
 
 function openEdit(row: SiteBApi.SiteB) {
@@ -581,7 +589,7 @@ onMounted(async () => {
             placeholder="请输入运行目录"
           />
           <div class="text-muted-foreground mt-1 text-xs">
-            stripe系列清空其他通道默认填 [deal]
+            stripe 留空时随机从单词库目录中选取，其他通道默认填 deal
           </div>
         </FormItem>
         <FormItem>
@@ -655,6 +663,7 @@ onMounted(async () => {
       <Table
         :columns="gatewayColumns"
         :data-source="gatewayList"
+        :loading="gatewayLoading"
         :pagination="false"
         :scroll="{ x: 720 }"
         row-key="id"
@@ -681,7 +690,17 @@ onMounted(async () => {
             </span>
           </template>
           <template v-else-if="column.key === 'gateway'">
-            <Button size="small" @click="onGatewayAction">网关</Button>
+            <Tooltip v-if="record.gatewayUrl" :title="record.gatewayUrl">
+              <Button
+                class="px-0"
+                size="small"
+                type="link"
+                @click="copyGatewayUrl(record.gatewayUrl)"
+              >
+                网关
+              </Button>
+            </Tooltip>
+            <span v-else class="text-muted-foreground">-</span>
           </template>
         </template>
       </Table>

@@ -48,6 +48,17 @@ export namespace SiteBApi {
     account?: string;
     password?: string;
   }
+
+  export interface Gateway {
+    accountBound: boolean;
+    accountEnabled: boolean;
+    channelName: string;
+    gatewayUrl: string;
+    id: number;
+    paymentMode: 'checkout' | 'embedded' | 'local';
+    remark: string;
+    status: boolean;
+  }
 }
 
 /** B 站列表 */
@@ -68,4 +79,9 @@ export async function updateSiteB(id: number, data: SiteBApi.UpdatePayload) {
 /** 更新 B 站状态 */
 export async function setSiteBStatus(id: number, status: boolean) {
   return requestClient.put<SiteBApi.SiteB>(`/site-bs/${id}/status`, { status });
+}
+
+/** B 站网关列表 */
+export async function getSiteBGateways(id: number) {
+  return requestClient.get<SiteBApi.Gateway[]>(`/site-bs/${id}/gateways`);
 }
