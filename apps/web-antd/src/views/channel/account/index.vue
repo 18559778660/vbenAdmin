@@ -395,6 +395,18 @@ async function submitStep2() {
     message.warning('请选择B站');
     return;
   }
+  if (!step2Form.publicKey.trim()) {
+    message.warning('请输入公钥');
+    return;
+  }
+  if (!step2Form.privateKey.trim()) {
+    message.warning('请输入私钥');
+    return;
+  }
+  if (!step2Form.webSecret.trim()) {
+    message.warning('请输入web秘钥');
+    return;
+  }
   if (!step1Form.channelId) {
     message.warning('请先选择通道');
     viewMode.value = 'create-step1';
@@ -419,7 +431,7 @@ async function submitStep2() {
       sort: step2Form.sort,
       appId: step2Form.publicKey.trim(),
       webSecret: step2Form.webSecret.trim(),
-      privateKey: step2Form.privateKey,
+      privateKey: step2Form.privateKey.trim(),
       remark: step2Form.remark.trim(),
     });
     message.success('已新增');
@@ -1060,20 +1072,20 @@ onMounted(async () => {
             <Input v-model:value="step2Form.remark" placeholder="请输入备注" />
           </FormItem>
 
-          <FormItem label="公钥">
+          <FormItem label="公钥" required>
             <Input
               v-model:value="step2Form.publicKey"
               placeholder="请输入公钥"
             />
           </FormItem>
-          <FormItem label="私钥">
+          <FormItem label="私钥" required>
             <Input
               v-model:value="step2Form.privateKey"
               placeholder="请输入私钥"
             />
           </FormItem>
 
-          <FormItem label="web秘钥">
+          <FormItem label="web秘钥" required>
             <Input
               v-model:value="step2Form.webSecret"
               placeholder="请输入web秘钥"
