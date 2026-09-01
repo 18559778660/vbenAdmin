@@ -56,6 +56,7 @@ export namespace ChannelApi {
     autoShip: boolean;
     returnKeywords: string;
     disableBrandWords: string;
+    accountCount: number;
     createdBy: string;
     createdAt: string;
     updatedBy: string;
@@ -163,6 +164,11 @@ export async function setChannelStatus(id: number, status: boolean) {
   return requestClient.put<ChannelApi.Channel>(`/channels/${id}/status`, {
     status,
   });
+}
+
+/** 删除通道 */
+export async function deleteChannel(id: number) {
+  return requestClient.delete(`/channels/${id}`);
 }
 
 export async function uploadChannelPackage(id: number, file: File) {

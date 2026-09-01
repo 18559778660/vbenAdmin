@@ -1,6 +1,7 @@
 import { ref } from 'vue';
 
 export type ChannelRow = {
+  accountCount: number;
   allowCardTypes: string[];
   allowCountries: string[];
   amountLimitMode: string;
@@ -223,6 +224,7 @@ function baseRow(
     amountLimitMode: 'single',
     calcCurrency: 'USD',
     allowCountries: [],
+    accountCount: 0,
     preferCountries: [],
     disableCountries: [],
     allowCardTypes: [],

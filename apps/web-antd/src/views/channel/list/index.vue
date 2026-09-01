@@ -33,6 +33,7 @@ import {
 } from '#/api/basic-config';
 import {
   createChannel,
+  deleteChannel,
   downloadChannelPackage,
   getChannelList,
   getChannelPlatformOptions,
@@ -157,8 +158,9 @@ const columns = [
   {
     title: '操作',
     key: 'actions',
-    width: 130,
+    width: 168,
     fixed: 'left' as const,
+    align: 'center' as const,
   },
   { title: '通道名称', dataIndex: 'name', key: 'name', width: 120 },
   { title: '通道平台', dataIndex: 'platform', key: 'platform', width: 100 },
@@ -335,6 +337,25 @@ function onEdit(row: ChannelRow) {
   infoForm.autoShip = row.autoShip;
   infoForm.returnKeywords = row.returnKeywords;
   infoOpen.value = true;
+}
+
+function onDelete(row: ChannelRow) {
+  if (row.accountCount > 0) {
+    message.warning('该通道仍有关联通道账号，无法删除');
+    return;
+  }
+  Modal.confirm({
+    title: '删除通道',
+    content: `确定删除通道「${row.name}」吗？`,
+    okText: '删除',
+    okType: 'danger',
+    cancelText: '取消',
+    async onOk() {
+      await deleteChannel(row.id);
+      message.success('已删除');
+      await loadList();
+    },
+  });
 }
 
 function onLimit(row: ChannelRow) {
@@ -639,9 +660,10 @@ onMounted(() => {
       >
         <template #bodyCell="{ column, record }">
           <template v-if="column.key === 'actions'">
-            <Space>
+            <Space :size="0" class="inline-flex flex-nowrap">
               <Tooltip title="编辑">
                 <Button
+                  class="!px-1.5"
                   size="small"
                   type="link"
                   @click="onEdit(record as ChannelRow)"
@@ -651,6 +673,7 @@ onMounted(() => {
               </Tooltip>
               <Tooltip title="限制">
                 <Button
+                  class="!px-1.5"
                   size="small"
                   type="link"
                   @click="onLimit(record as ChannelRow)"
@@ -663,12 +686,31 @@ onMounted(() => {
               </Tooltip>
               <Tooltip title="上传压缩包">
                 <Button
+                  class="!px-1.5"
                   size="small"
                   type="link"
                   @click="onUploadPackage(record as ChannelRow)"
                   :loading="packageUploading"
                 >
                   <IconifyIcon class="size-4" icon="lucide:file-check" />
+                </Button>
+              </Tooltip>
+              <Tooltip
+                :title="
+                  record.accountCount > 0
+                    ? '仍有关联通道账号，无法删除'
+                    : '删除'
+                "
+              >
+                <Button
+                  :disabled="record.accountCount > 0"
+                  class="!px-1.5"
+                  danger
+                  size="small"
+                  type="link"
+                  @click="onDelete(record as ChannelRow)"
+                >
+                  <IconifyIcon class="size-4" icon="lucide:trash-2" />
                 </Button>
               </Tooltip>
             </Space>
