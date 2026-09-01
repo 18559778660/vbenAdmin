@@ -170,3 +170,8 @@ export async function setChannelAccountStatus(id: number, status: boolean) {
     { status },
   );
 }
+
+/** 删除通道账号 */
+export async function deleteChannelAccount(id: number) {
+  return requestClient.delete(`/channel-accounts/${id}`);
+}

@@ -22,6 +22,7 @@ export type ChannelGroupRow = {
   interceptMax: number;
   interceptMin: number;
   interceptMode: string;
+  memberCount: number;
   name: string;
   oldCustomerDays: number;
   payFrequencyDays: number;

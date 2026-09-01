@@ -28,6 +28,7 @@ export namespace ChannelGroupApi {
     collectRule: string;
     autoShip: boolean;
     availableAccountCount: number;
+    memberCount: number;
     gatewayUrl: string;
     createdBy: string;
     createdAt: string;
@@ -121,6 +122,11 @@ export async function updateChannelGroup(
     `/channel-groups/${id}`,
     data,
   );
+}
+
+/** 删除通道分组 */
+export async function deleteChannelGroup(id: number) {
+  return requestClient.delete(`/channel-groups/${id}`);
 }
 
 export async function getChannelGroupAccounts(

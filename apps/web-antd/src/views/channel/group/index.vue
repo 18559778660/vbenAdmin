@@ -33,6 +33,7 @@ import {
 import { getChannelList } from '#/api/channel';
 import {
   createChannelGroup,
+  deleteChannelGroup,
   getChannelGroupAccounts,
   getChannelGroupList,
   setChannelGroupAccountMembership,
@@ -133,8 +134,9 @@ const columns = [
   {
     title: '操作',
     key: 'actions',
-    width: 100,
+    width: 132,
     fixed: 'left' as const,
+    align: 'center' as const,
   },
   { title: '分组CODE', dataIndex: 'code', key: 'code', width: 120 },
   { title: '分组名', dataIndex: 'name', key: 'name', width: 140 },
@@ -338,6 +340,25 @@ function openEdit(row: ChannelGroupRow) {
   formOpen.value = true;
 }
 
+function onDelete(row: ChannelGroupRow) {
+  if (row.memberCount > 0) {
+    message.warning('该分组仍绑定通道账号，无法删除');
+    return;
+  }
+  Modal.confirm({
+    title: '删除通道分组',
+    content: `确定删除分组「${row.name}（${row.code}）」吗？`,
+    okText: '删除',
+    okType: 'danger',
+    cancelText: '取消',
+    async onOk() {
+      await deleteChannelGroup(row.id);
+      message.success('已删除');
+      await loadList();
+    },
+  });
+}
+
 async function handleFormSave() {
   if (!groupForm.name.trim() || !groupForm.code.trim()) {
     message.warning('请填写分组名和分组CODE');
@@ -516,9 +537,10 @@ onMounted(() => {
       >
         <template #bodyCell="{ column, record }">
           <template v-if="column.key === 'actions'">
-            <Space>
+            <Space :size="0" class="inline-flex flex-nowrap">
               <Tooltip title="编辑">
                 <Button
+                  class="!px-1.5"
                   size="small"
                   type="link"
                   @click="openEdit(record as ChannelGroupRow)"
@@ -528,11 +550,28 @@ onMounted(() => {
               </Tooltip>
               <Tooltip title="账号列表">
                 <Button
+                  class="!px-1.5"
                   size="small"
                   type="link"
                   @click="onViewAccounts(record as ChannelGroupRow)"
                 >
                   <IconifyIcon class="size-4" icon="lucide:list" />
+                </Button>
+              </Tooltip>
+              <Tooltip
+                :title="
+                  record.memberCount > 0 ? '仍绑定通道账号，无法删除' : '删除'
+                "
+              >
+                <Button
+                  :disabled="record.memberCount > 0"
+                  class="!px-1.5"
+                  danger
+                  size="small"
+                  type="link"
+                  @click="onDelete(record as ChannelGroupRow)"
+                >
+                  <IconifyIcon class="size-4" icon="lucide:trash-2" />
                 </Button>
               </Tooltip>
             </Space>

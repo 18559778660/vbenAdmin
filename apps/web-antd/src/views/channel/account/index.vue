@@ -28,6 +28,7 @@ import {
 
 import {
   createChannelAccount,
+  deleteChannelAccount,
   getAssignUserList,
   getCardTypeList,
   getChannelAccountList,
@@ -190,8 +191,9 @@ const columns = [
   {
     title: '操作',
     key: 'actions',
-    width: 140,
+    width: 168,
     fixed: 'left' as const,
+    align: 'center' as const,
   },
   { title: '通道', dataIndex: 'channel', key: 'channel', width: 120 },
   { title: '账号名称', dataIndex: 'accountNo', key: 'accountNo', width: 140 },
@@ -444,6 +446,25 @@ function onEdit(row: ChannelAccountRow) {
   editForm.privateKey = row.privateKey;
   editForm.environment = row.environment;
   editOpen.value = true;
+}
+
+function onDelete(row: ChannelAccountRow) {
+  if (row.groupNames?.length) {
+    message.warning('该账号已绑定通道分组，无法删除');
+    return;
+  }
+  Modal.confirm({
+    title: '删除通道账号',
+    content: `确定删除账号「${row.accountNo}」吗？`,
+    okText: '删除',
+    okType: 'danger',
+    cancelText: '取消',
+    async onOk() {
+      await deleteChannelAccount(row.id);
+      message.success('已删除');
+      await loadList();
+    },
+  });
 }
 
 function onLimit(row: ChannelAccountRow) {
@@ -734,9 +755,10 @@ onMounted(async () => {
         >
           <template #bodyCell="{ column, record }">
             <template v-if="column.key === 'actions'">
-              <Space>
+              <Space :size="0" class="inline-flex flex-nowrap">
                 <Tooltip title="编辑">
                   <Button
+                    class="!px-1.5"
                     size="small"
                     type="link"
                     @click="onEdit(record as ChannelAccountRow)"
@@ -746,6 +768,7 @@ onMounted(async () => {
                 </Tooltip>
                 <Tooltip title="限制">
                   <Button
+                    class="!px-1.5"
                     size="small"
                     type="link"
                     @click="onLimit(record as ChannelAccountRow)"
@@ -757,8 +780,26 @@ onMounted(async () => {
                   </Button>
                 </Tooltip>
                 <Tooltip title="收款信息（暂未开放）">
-                  <Button disabled size="small" type="link">
+                  <Button class="!px-1.5" disabled size="small" type="link">
                     <IconifyIcon class="size-4" icon="lucide:receipt" />
+                  </Button>
+                </Tooltip>
+                <Tooltip
+                  :title="
+                    record.groupNames?.length
+                      ? '已绑定通道分组，无法删除'
+                      : '删除'
+                  "
+                >
+                  <Button
+                    :disabled="!!record.groupNames?.length"
+                    class="!px-1.5"
+                    danger
+                    size="small"
+                    type="link"
+                    @click="onDelete(record as ChannelAccountRow)"
+                  >
+                    <IconifyIcon class="size-4" icon="lucide:trash-2" />
                   </Button>
                 </Tooltip>
               </Space>
