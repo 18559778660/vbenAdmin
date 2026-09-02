@@ -1,5 +1,8 @@
 import { ref } from 'vue';
 
+export const PLATFORM_CODE_STRIPE = 'stripe';
+export const PLATFORM_CODE_PAYPAL = 'paypal';
+
 export type ChannelAccountRow = {
   accountNo: string;
   alias: string;
@@ -33,6 +36,7 @@ export type ChannelAccountRow = {
   paymentMethod: string;
   preferCountries: string[];
   privateKey: string;
+  publicKey: string;
   remark: string;
   resetHour: number;
   resetTimezone: string;
@@ -137,6 +141,7 @@ export const mockAccountList = ref<ChannelAccountRow[]>([
     sort: 0,
     appId:
       'AR3owxYj9Xcy6F3rwn45t_b07_R9WtGy4aAer5yCnYli5zOy56YDbPZrZ3_AjdL_Ddg40lT2cwMgstVo',
+    publicKey: '',
     merchantId: '',
     webSecret: '18K25823E2849902A',
     privateKey:
@@ -184,6 +189,7 @@ export const mockAccountList = ref<ChannelAccountRow[]>([
     preferCountries: ['US', 'CA'],
     sort: 0,
     appId: '',
+    publicKey: '',
     merchantId: '',
     webSecret: '',
     privateKey: '',
@@ -230,6 +236,7 @@ export const mockAccountList = ref<ChannelAccountRow[]>([
     preferCountries: ['US'],
     sort: 0,
     appId: '',
+    publicKey: '',
     merchantId: '',
     webSecret: '',
     privateKey: '',

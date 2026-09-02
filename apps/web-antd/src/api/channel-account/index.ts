@@ -40,6 +40,7 @@ export namespace ChannelAccountApi {
     successMode: string;
     sort: number;
     appId: string;
+    publicKey: string;
     merchantId: string;
     webSecret: string;
     privateKey: string;
@@ -81,6 +82,7 @@ export namespace ChannelAccountApi {
     disableCountries?: string[];
     sort?: number;
     appId?: string;
+    publicKey?: string;
     webSecret?: string;
     privateKey?: string;
     remark?: string;
@@ -93,6 +95,7 @@ export namespace ChannelAccountApi {
     siteBId: number;
     sort?: number;
     appId?: string;
+    publicKey?: string;
     merchantId?: string;
     webSecret?: string;
     privateKey?: string;

@@ -53,6 +53,8 @@ import {
 import {
   ACCOUNT_LIMIT_MODE_LABELS,
   ENVIRONMENT_OPTIONS,
+  PLATFORM_CODE_PAYPAL,
+  PLATFORM_CODE_STRIPE,
   RESET_HOUR_OPTIONS,
   STATUS_OPTIONS,
   validateAccountSuccessSetting,
@@ -96,7 +98,9 @@ const applied = reactive({
 
 const loading = ref(false);
 const accountList = ref<ChannelAccountRow[]>([]);
-const channelOptions = ref<{ label: string; value: number }[]>([]);
+const channelOptions = ref<
+  { label: string; platform: string; value: number }[]
+>([]);
 const siteBOptions = ref<{ label: string; value: number }[]>([]);
 const groupFilterOptions = ref<{ label: string; value: number }[]>([]);
 const assignUserFilterOptions = ref<
@@ -117,6 +121,7 @@ const step2Form = reactive({
   sort: 0,
   publicKey: '',
   webSecret: '',
+  appId: '',
   siteBId: undefined as number | undefined,
   dailyOrderLimit: 0,
   disableCountries: [] as string[],
@@ -131,6 +136,7 @@ const editForm = reactive({
   status: 1,
   sort: 0,
   appId: '',
+  publicKey: '',
   merchantId: '',
   webSecret: '',
   siteBId: undefined as number | undefined,
@@ -172,6 +178,24 @@ const channelFilterOptions = computed(() => [
   ...channelOptions.value,
 ]);
 
+const editingChannelId = ref<number | undefined>(undefined);
+
+const selectedCreatePlatformCode = computed(
+  () =>
+    channelOptions.value.find((item) => item.value === step1Form.channelId)
+      ?.platform || '',
+);
+
+const editingPlatformCode = computed(
+  () =>
+    channelOptions.value.find((item) => item.value === editingChannelId.value)
+      ?.platform || '',
+);
+
+const isStripePlatform = (platform: string) =>
+  platform === PLATFORM_CODE_STRIPE;
+const isPaypalPlatform = (platform: string) =>
+  platform === PLATFORM_CODE_PAYPAL;
 const selectedChannelLabel = computed(
   () =>
     channelOptions.value.find((item) => item.value === step1Form.channelId)
@@ -226,6 +250,7 @@ async function loadChannelOptions() {
     channelOptions.value = rows.map((row) => ({
       label: row.name,
       value: row.id,
+      platform: row.platform,
     }));
   } catch {
     channelOptions.value = [];
@@ -355,6 +380,7 @@ function resetStep2Form() {
   step2Form.sort = 0;
   step2Form.publicKey = '';
   step2Form.webSecret = '';
+  step2Form.appId = '';
   step2Form.siteBId = undefined;
   step2Form.dailyOrderLimit = 0;
   step2Form.disableCountries = [];
@@ -395,8 +421,18 @@ async function submitStep2() {
     message.warning('请选择B站');
     return;
   }
-  if (!step2Form.publicKey.trim()) {
+  if (
+    isStripePlatform(selectedCreatePlatformCode.value) &&
+    !step2Form.publicKey.trim()
+  ) {
     message.warning('请输入公钥');
+    return;
+  }
+  if (
+    isPaypalPlatform(selectedCreatePlatformCode.value) &&
+    !step2Form.appId.trim()
+  ) {
+    message.warning('请输入应用ID');
     return;
   }
   if (!step2Form.privateKey.trim()) {
@@ -429,7 +465,8 @@ async function submitStep2() {
       preferCountries: [...step2Form.preferCountries],
       disableCountries: [...step2Form.disableCountries],
       sort: step2Form.sort,
-      appId: step2Form.publicKey.trim(),
+      appId: step2Form.appId.trim(),
+      publicKey: step2Form.publicKey.trim(),
       webSecret: step2Form.webSecret.trim(),
       privateKey: step2Form.privateKey.trim(),
       remark: step2Form.remark.trim(),
@@ -446,11 +483,13 @@ async function submitStep2() {
 
 function onEdit(row: ChannelAccountRow) {
   editingId.value = row.id;
+  editingChannelId.value = row.channelId;
   editForm.accountNo = row.accountNo;
   editForm.alias = row.alias;
   editForm.status = row.status ? 1 : 0;
   editForm.sort = row.sort;
   editForm.appId = row.appId;
+  editForm.publicKey = row.publicKey;
   editForm.merchantId = row.merchantId;
   editForm.webSecret = row.webSecret;
   editForm.siteBId = row.siteBId || undefined;
@@ -524,6 +563,7 @@ async function handleEditSave() {
       siteBId: editForm.siteBId,
       sort: editForm.sort,
       appId: editForm.appId.trim(),
+      publicKey: editForm.publicKey.trim(),
       merchantId: editForm.merchantId.trim(),
       webSecret: editForm.webSecret.trim(),
       privateKey: editForm.privateKey.trim(),
@@ -1072,10 +1112,24 @@ onMounted(async () => {
             <Input v-model:value="step2Form.remark" placeholder="请输入备注" />
           </FormItem>
 
-          <FormItem label="公钥" required>
+          <FormItem
+            v-if="isStripePlatform(selectedCreatePlatformCode)"
+            label="公钥"
+            required
+          >
             <Input
               v-model:value="step2Form.publicKey"
-              placeholder="请输入公钥"
+              placeholder="请输入 pk_ 开头公钥"
+            />
+          </FormItem>
+          <FormItem
+            v-else-if="isPaypalPlatform(selectedCreatePlatformCode)"
+            label="应用ID"
+            required
+          >
+            <Input
+              v-model:value="step2Form.appId"
+              placeholder="请输入 PayPal Client ID"
             />
           </FormItem>
           <FormItem label="私钥" required>
@@ -1143,13 +1197,25 @@ onMounted(async () => {
           <FormItem label="备注">
             <Input v-model:value="editForm.remark" placeholder="请输入备注" />
           </FormItem>
-          <FormItem label="应用ID">
-            <Input v-model:value="editForm.appId" placeholder="请输入应用ID" />
+          <FormItem v-if="isStripePlatform(editingPlatformCode)" label="公钥">
+            <Input
+              v-model:value="editForm.publicKey"
+              placeholder="请输入 pk_ 开头公钥"
+            />
           </FormItem>
-          <FormItem label="秘钥">
+          <FormItem
+            v-else-if="isPaypalPlatform(editingPlatformCode)"
+            label="应用ID"
+          >
+            <Input
+              v-model:value="editForm.appId"
+              placeholder="请输入 PayPal Client ID"
+            />
+          </FormItem>
+          <FormItem label="私钥">
             <Input
               v-model:value="editForm.privateKey"
-              placeholder="请输入秘钥"
+              placeholder="请输入私钥"
             />
           </FormItem>
           <FormItem label="商户ID">
