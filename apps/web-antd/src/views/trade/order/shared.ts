@@ -72,7 +72,7 @@ export const SITE_B_OPTIONS = [
   { label: 'shop-demo.com', value: 'shop-demo.com' },
 ];
 
-/** 汇总/工具栏仍为静态预留，后续再接接口 */
+/** 汇总栏默认空值 */
 export interface TradeOrderSummary {
   totalCount: number;
   unpaidCount: number;
@@ -84,7 +84,7 @@ export interface TradeOrderSummary {
   amountUsd: string;
 }
 
-export const MOCK_SUMMARY: TradeOrderSummary = {
+export const EMPTY_SUMMARY: TradeOrderSummary = {
   totalCount: 0,
   unpaidCount: 0,
   failedCount: 0,

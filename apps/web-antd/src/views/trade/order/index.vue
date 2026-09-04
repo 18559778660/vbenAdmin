@@ -24,14 +24,14 @@ import {
   Tag,
 } from 'ant-design-vue';
 
-import { getOrderList } from '#/api';
+import { getOrderList, getOrderSummary } from '#/api';
 
 import {
   ACCOUNT_OPTIONS,
   CARD_TYPE_OPTIONS,
   CUSTOMER_TYPE_OPTIONS,
+  EMPTY_SUMMARY,
   MERCHANT_OPTIONS,
-  MOCK_SUMMARY,
   PAY_METHOD_OPTIONS,
   SHIP_STATUS_OPTIONS,
   SITE_B_OPTIONS,
@@ -48,7 +48,7 @@ const { RangePicker } = DatePicker;
 const loading = ref(false);
 const list = ref<OrderApi.Order[]>([]);
 const selectedRowKeys = ref<string[]>([]);
-const summary = ref({ ...MOCK_SUMMARY });
+const summary = ref({ ...EMPTY_SUMMARY });
 
 const pagination = reactive({
   current: 1,
@@ -273,7 +273,21 @@ function onToolbarAction(label: string) {
 async function loadList() {
   loading.value = true;
   try {
-    list.value = await getOrderList();
+    const [orders, orderSummary] = await Promise.all([
+      getOrderList(),
+      getOrderSummary(),
+    ]);
+    list.value = orders;
+    summary.value = {
+      totalCount: orderSummary.totalCount ?? 0,
+      unpaidCount: orderSummary.unpaidCount ?? 0,
+      failedCount: orderSummary.failedCount ?? 0,
+      successCount: orderSummary.successCount ?? 0,
+      payRate: orderSummary.payRate || '0%',
+      successRate: orderSummary.successRate || '0%',
+      totalRate: orderSummary.totalRate || '0%',
+      amountUsd: orderSummary.amountUsd || '0.00',
+    };
   } finally {
     loading.value = false;
   }

@@ -7,6 +7,7 @@ import { Page } from '@vben/common-ui';
 import { IconifyIcon } from '@vben/icons';
 
 import {
+  Alert,
   Button,
   Card,
   Form,
@@ -188,6 +189,14 @@ onMounted(() => {
     auto-content-height
     description="从标准货币列表新增，名称和 CODE 自动带出"
   >
+    <Alert
+      class="mb-4"
+      show-icon
+      type="info"
+      message="汇率说明"
+      description="以美元（USD）为基准币，USD 汇率请保持为 1（一比一）。其他货币的汇率表示「1 美元可兑换多少该币种」，例如 CNY=7.12 表示 1 USD ≈ 7.12 CNY。订单汇总「收款金额(USD)」会按此汇率折算；缺失或无效汇率时按 1:1 兜底。"
+    />
+
     <Card class="mb-4" :bordered="false">
       <Form layout="inline" class="gap-y-3">
         <FormItem label="筛选">
@@ -314,6 +323,9 @@ onMounted(() => {
             class="w-full"
             placeholder="请输入汇率"
           />
+          <div class="text-muted-foreground mt-1 text-xs">
+            含义：1 美元可兑换多少该币种。USD 请填 1；如 CNY 填 7.12。
+          </div>
         </FormItem>
       </Form>
     </Modal>

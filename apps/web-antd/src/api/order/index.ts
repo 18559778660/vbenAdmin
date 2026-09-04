@@ -27,9 +27,25 @@ export namespace OrderApi {
     createdAt: string;
     updatedAt: string;
   }
+
+  export interface Summary {
+    totalCount: number;
+    unpaidCount: number;
+    failedCount: number;
+    successCount: number;
+    payRate: string;
+    successRate: string;
+    totalRate: string;
+    amountUsd: string;
+  }
 }
 
 /** 订单列表 */
 export async function getOrderList() {
   return requestClient.get<OrderApi.Order[]>('/orders');
+}
+
+/** 订单汇总栏 */
+export async function getOrderSummary() {
+  return requestClient.get<OrderApi.Summary>('/orders/summary');
 }
