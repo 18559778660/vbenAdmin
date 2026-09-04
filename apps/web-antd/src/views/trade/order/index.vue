@@ -1,9 +1,9 @@
 <script lang="ts" setup>
 import type { Dayjs } from 'dayjs';
 
-import type { TradeOrderRow } from './shared';
+import type { OrderApi } from '#/api';
 
-import { reactive, ref } from 'vue';
+import { onMounted, reactive, ref } from 'vue';
 
 import { Page } from '@vben/common-ui';
 import { IconifyIcon } from '@vben/icons';
@@ -22,15 +22,15 @@ import {
   Space,
   Table,
   Tag,
-  Tooltip,
 } from 'ant-design-vue';
+
+import { getOrderList } from '#/api';
 
 import {
   ACCOUNT_OPTIONS,
   CARD_TYPE_OPTIONS,
   CUSTOMER_TYPE_OPTIONS,
   MERCHANT_OPTIONS,
-  MOCK_ORDERS,
   MOCK_SUMMARY,
   PAY_METHOD_OPTIONS,
   SHIP_STATUS_OPTIONS,
@@ -45,7 +45,46 @@ defineOptions({ name: 'TradeOrderList' });
 
 const { RangePicker } = DatePicker;
 
+const loading = ref(false);
+const list = ref<OrderApi.Order[]>([]);
+const selectedRowKeys = ref<string[]>([]);
 const summary = ref({ ...MOCK_SUMMARY });
+
+const pagination = reactive({
+  current: 1,
+  pageSize: 20,
+  showSizeChanger: true,
+  pageSizeOptions: ['10', '20', '50', '100'],
+  showTotal: (total: number) => `共 ${total} 条`,
+});
+
+/** 搜索表单：静态预留，暂不参与接口筛选 */
+const searchForm = reactive({
+  merchant: undefined as string | undefined,
+  email: '',
+  phone: '',
+  ip: '',
+  orderNo: '',
+  siteA: '',
+  status: '' as '' | string,
+  customerType: '' as '' | string,
+  originPayMethod: undefined as string | undefined,
+  payMethod: undefined as string | undefined,
+  accountId: undefined as string | undefined,
+  siteB: undefined as string | undefined,
+  paidRange: undefined as [Dayjs, Dayjs] | undefined,
+  createdRange: undefined as [Dayjs, Dayjs] | undefined,
+  shipStatus: '' as '' | string,
+  country: '',
+  currency: '',
+  minAmount: '',
+  maxAmount: '',
+  cardBin: '',
+  cardType: '' as '' | string,
+  billNo: '',
+  logisticsNo: '',
+  transactionNo: '',
+});
 
 const summaryColumns = [
   {
@@ -98,43 +137,7 @@ const summaryColumns = [
   },
 ];
 
-const searchForm = reactive({
-  merchant: undefined as string | undefined,
-  email: '',
-  phone: '',
-  ip: '',
-  orderNo: '',
-  siteA: '',
-  status: '' as '' | string,
-  customerType: '' as '' | string,
-  originPayMethod: undefined as string | undefined,
-  payMethod: undefined as string | undefined,
-  accountId: undefined as string | undefined,
-  siteB: undefined as string | undefined,
-  paidRange: undefined as [Dayjs, Dayjs] | undefined,
-  createdRange: undefined as [Dayjs, Dayjs] | undefined,
-  shipStatus: '' as '' | string,
-  country: '',
-  currency: '',
-  minAmount: '',
-  maxAmount: '',
-  cardBin: '',
-  cardType: '' as '' | string,
-  billNo: '',
-  logisticsNo: '',
-  transactionNo: '',
-});
-
-const list = ref<TradeOrderRow[]>([...MOCK_ORDERS]);
-const selectedRowKeys = ref<string[]>([]);
-
 const columns = [
-  {
-    title: '操作',
-    key: 'actions',
-    width: 88,
-    fixed: 'left' as const,
-  },
   {
     title: '商家',
     dataIndex: 'merchantName',
@@ -143,15 +146,15 @@ const columns = [
   },
   {
     title: '订单号',
-    dataIndex: 'orderNo',
-    key: 'orderNo',
+    dataIndex: 'merchantOrder',
+    key: 'merchantOrder',
     width: 220,
   },
   {
     title: '交易号',
-    dataIndex: 'transactionNo',
-    key: 'transactionNo',
-    width: 180,
+    dataIndex: 'providerRef',
+    key: 'providerRef',
+    width: 200,
   },
   {
     title: 'B站',
@@ -163,13 +166,13 @@ const columns = [
     title: '支付通道',
     dataIndex: 'channel',
     key: 'channel',
-    width: 110,
+    width: 120,
   },
   {
     title: '支付账号',
     dataIndex: 'accountName',
     key: 'accountName',
-    width: 260,
+    width: 220,
   },
   {
     title: '网站金额',
@@ -196,6 +199,18 @@ const columns = [
     width: 100,
   },
   {
+    title: '下单站点',
+    dataIndex: 'merchantSite',
+    key: 'merchantSite',
+    width: 180,
+  },
+  {
+    title: '创建时间',
+    dataIndex: 'createdAt',
+    key: 'createdAt',
+    width: 170,
+  },
+  {
     title: '交易状态',
     key: 'status',
     width: 100,
@@ -207,8 +222,20 @@ function onSelectionChange(keys: (number | string)[]) {
   selectedRowKeys.value = keys.map(String);
 }
 
+function onTableChange(pag: { current?: number; pageSize?: number }) {
+  if (pag.pageSize && pag.pageSize !== pagination.pageSize) {
+    pagination.pageSize = pag.pageSize;
+    pagination.current = 1;
+    return;
+  }
+  if (pag.current) {
+    pagination.current = pag.current;
+  }
+}
+
 function handleSearch() {
-  message.success('搜索（静态页，暂未接入接口）');
+  message.info('搜索暂未接入，当前仅展示全部订单');
+  void loadList();
 }
 
 function resetSearch() {
@@ -236,21 +263,25 @@ function resetSearch() {
   searchForm.billNo = '';
   searchForm.logisticsNo = '';
   searchForm.transactionNo = '';
-  list.value = [...MOCK_ORDERS];
-  message.success('已重置');
-}
-
-function onViewDetail(row: TradeOrderRow) {
-  message.info(`查看详细：${row.orderNo}`);
-}
-
-function onViewLog(row: TradeOrderRow) {
-  message.info(`订单日志：${row.orderNo}`);
+  void loadList();
 }
 
 function onToolbarAction(label: string) {
-  message.info(`${label}（静态页，暂未接入）`);
+  message.info(`${label}（暂未接入）`);
 }
+
+async function loadList() {
+  loading.value = true;
+  try {
+    list.value = await getOrderList();
+  } finally {
+    loading.value = false;
+  }
+}
+
+onMounted(() => {
+  void loadList();
+});
 </script>
 
 <template>
@@ -566,53 +597,40 @@ function onToolbarAction(label: string) {
       <Table
         :columns="columns"
         :data-source="list"
-        :pagination="{ pageSize: 20, showSizeChanger: true }"
+        :loading="loading"
+        :pagination="pagination"
         :row-selection="{
           selectedRowKeys,
           onChange: onSelectionChange,
         }"
-        :scroll="{ x: 1700 }"
+        :scroll="{ x: 1900 }"
         row-key="id"
         size="small"
+        @change="onTableChange"
       >
         <template #bodyCell="{ column, record }">
-          <template v-if="column.key === 'actions'">
-            <Space :size="4">
-              <Tooltip title="查看详细">
-                <Button
-                  class="!flex !h-7 !w-7 !items-center !justify-center !p-0"
-                  size="small"
-                  type="primary"
-                  @click="onViewDetail(record as TradeOrderRow)"
-                >
-                  <IconifyIcon class="size-3.5" icon="lucide:eye" />
-                </Button>
-              </Tooltip>
-              <Tooltip title="日志">
-                <Button
-                  class="!flex !h-7 !w-7 !items-center !justify-center !p-0"
-                  size="small"
-                  type="primary"
-                  @click="onViewLog(record as TradeOrderRow)"
-                >
-                  <IconifyIcon class="size-3.5" icon="lucide:file-text" />
-                </Button>
-              </Tooltip>
-            </Space>
-          </template>
-          <template v-else-if="column.key === 'orderNo'">
+          <template v-if="column.key === 'merchantOrder'">
             <span class="break-all font-mono text-xs">
-              {{ (record as TradeOrderRow).orderNo }}
+              {{ (record as OrderApi.Order).merchantOrder || '-' }}
             </span>
           </template>
-          <template v-else-if="column.key === 'transactionNo'">
+          <template v-else-if="column.key === 'providerRef'">
             <span class="break-all font-mono text-xs">
-              {{ (record as TradeOrderRow).transactionNo || '-' }}
+              {{ (record as OrderApi.Order).providerRef || '-' }}
             </span>
+          </template>
+          <template v-else-if="column.key === 'siteB'">
+            {{ (record as OrderApi.Order).siteB || '-' }}
+          </template>
+          <template v-else-if="column.key === 'accountName'">
+            {{ (record as OrderApi.Order).accountName || '-' }}
+          </template>
+          <template v-else-if="column.key === 'merchantName'">
+            {{ (record as OrderApi.Order).merchantName || '-' }}
           </template>
           <template v-else-if="column.key === 'status'">
-            <Tag :color="STATUS_COLORS[(record as TradeOrderRow).status]">
-              {{ STATUS_LABELS[(record as TradeOrderRow).status] }}
+            <Tag :color="STATUS_COLORS[(record as OrderApi.Order).status]">
+              {{ STATUS_LABELS[(record as OrderApi.Order).status] }}
             </Tag>
           </template>
         </template>

@@ -5,6 +5,7 @@ export * from './channel-assign';
 export * from './channel-group';
 export * from './core';
 export * from './merchant';
+export * from './order';
 export * from './site-a';
 export * from './site-b';
 export * from './stripe-wordbank';
