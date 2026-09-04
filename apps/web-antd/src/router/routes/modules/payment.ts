@@ -212,10 +212,19 @@ const routes: RouteRecordRaw[] = [
       {
         name: 'TradeOrderList',
         path: 'order',
-        component: Placeholder,
+        component: () => import('#/views/trade/order/index.vue'),
         meta: {
           icon: 'lucide:list-ordered',
           title: $t('page.trade.order'),
+        },
+      },
+      {
+        name: 'TradeOrderLog',
+        path: 'order-log',
+        component: () => import('#/views/trade/order-log/index.vue'),
+        meta: {
+          icon: 'lucide:file-clock',
+          title: $t('page.trade.orderLog'),
         },
       },
       {
@@ -223,17 +232,9 @@ const routes: RouteRecordRaw[] = [
         path: 'hold',
         component: Placeholder,
         meta: {
+          hideInMenu: true,
           icon: 'lucide:hand',
           title: $t('page.trade.hold'),
-        },
-      },
-      {
-        name: 'TradeOrderLog',
-        path: 'order-log',
-        component: Placeholder,
-        meta: {
-          icon: 'lucide:file-clock',
-          title: $t('page.trade.orderLog'),
         },
       },
       {
