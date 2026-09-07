@@ -21,6 +21,7 @@ export namespace OrderApi {
     siteAmount: string;
     tradeAmount: string;
     fee: string;
+    feeAmount?: number;
     usdDiff: string;
     status: Status;
     errorMessage?: string;
