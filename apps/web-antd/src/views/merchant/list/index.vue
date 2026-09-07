@@ -660,7 +660,8 @@ onMounted(async () => {
           />
           <div class="text-muted-foreground mt-1 text-xs">
             默认 0，最大值 100。假如设置为 2，当网站货币不为美元时，美元金额 =
-            网站金额 × 汇率 × (100-2)/100
+            网站金额 ÷ 汇率 × (100-2)/100（汇率为货币列表中「1
+            美元可兑该币数量」）
           </div>
         </FormItem>
         <FormItem label="扣单">
@@ -746,7 +747,8 @@ onMounted(async () => {
           />
           <div class="text-muted-foreground mt-1 text-xs">
             默认 0，最大值 100。假如设置为 2，当网站货币不为美元时，美元金额 =
-            网站金额 × 汇率 × (100-2)/100
+            网站金额 ÷ 汇率 × (100-2)/100（汇率为货币列表中「1
+            美元可兑该币数量」）
           </div>
         </FormItem>
         <FormItem label="扣单">
