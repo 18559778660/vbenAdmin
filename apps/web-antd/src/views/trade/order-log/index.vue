@@ -3,7 +3,7 @@ import type { Dayjs } from 'dayjs';
 
 import type { OrderLogRow } from './shared';
 
-import { reactive, ref } from 'vue';
+import { onMounted, reactive, ref } from 'vue';
 
 import { Page } from '@vben/common-ui';
 import { IconifyIcon } from '@vben/icons';
@@ -16,25 +16,30 @@ import {
   FormItem,
   Input,
   message,
+  Modal,
   Select,
   Space,
   Table,
   Tooltip,
 } from 'ant-design-vue';
 
-import { LOG_TYPE_LABELS, MERCHANT_OPTIONS, MOCK_ORDER_LOGS } from './shared';
+import { getMerchantOptions, getOrderLogList } from '#/api';
+
+import { LOG_TYPE_LABELS } from './shared';
 
 defineOptions({ name: 'TradeOrderLog' });
 
 const { RangePicker } = DatePicker;
 
+const loading = ref(false);
 const searchForm = reactive({
-  merchant: undefined as string | undefined,
+  merchantId: undefined as number | undefined,
   orderNo: '',
   createdRange: undefined as [Dayjs, Dayjs] | undefined,
 });
 
-const list = ref<OrderLogRow[]>([...MOCK_ORDER_LOGS]);
+const merchantOptions = ref<{ label: string; value: number }[]>([]);
+const list = ref<OrderLogRow[]>([]);
 const selectedRowKeys = ref<number[]>([]);
 
 const columns = [
@@ -53,13 +58,13 @@ const columns = [
     title: '订单ID',
     dataIndex: 'orderId',
     key: 'orderId',
-    width: 100,
+    width: 200,
   },
   {
     title: '商户',
     dataIndex: 'merchantName',
     key: 'merchantName',
-    width: 100,
+    width: 120,
   },
   {
     title: '订单号',
@@ -90,21 +95,71 @@ function onSelectionChange(keys: (number | string)[]) {
   selectedRowKeys.value = keys.map(Number);
 }
 
+async function loadMerchants() {
+  const rows = await getMerchantOptions();
+  merchantOptions.value = rows.map((item) => {
+    const name = item.name || item.account || `#${item.id}`;
+    const label =
+      item.account && item.name && item.account !== item.name
+        ? `${item.name} (${item.account})`
+        : name;
+    return { label, value: item.id };
+  });
+}
+
+async function loadList() {
+  loading.value = true;
+  try {
+    const params: {
+      createdFrom?: string;
+      createdTo?: string;
+      merchantId?: number;
+      orderNo?: string;
+    } = {};
+    if (searchForm.merchantId) {
+      params.merchantId = searchForm.merchantId;
+    }
+    if (searchForm.orderNo.trim()) {
+      params.orderNo = searchForm.orderNo.trim();
+    }
+    if (searchForm.createdRange?.[0] && searchForm.createdRange?.[1]) {
+      params.createdFrom = searchForm.createdRange[0].format(
+        'YYYY-MM-DD HH:mm:ss',
+      );
+      params.createdTo = searchForm.createdRange[1].format(
+        'YYYY-MM-DD HH:mm:ss',
+      );
+    }
+    list.value = await getOrderLogList(params);
+  } finally {
+    loading.value = false;
+  }
+}
+
 function handleSearch() {
-  message.success('搜索（静态页，暂未接入接口）');
+  void loadList();
 }
 
 function resetSearch() {
-  searchForm.merchant = undefined;
+  searchForm.merchantId = undefined;
   searchForm.orderNo = '';
   searchForm.createdRange = undefined;
-  list.value = [...MOCK_ORDER_LOGS];
-  message.success('已重置');
+  void loadList();
 }
 
 function onViewDetail(row: OrderLogRow) {
-  message.info(`查看日志详情：${row.id}`);
+  Modal.info({
+    title: `日志详情 #${row.id}`,
+    width: 720,
+    content: row.remark || '-',
+  });
 }
+
+onMounted(() => {
+  void Promise.all([loadMerchants(), loadList()]).catch(() => {
+    message.error('加载订单日志失败');
+  });
+});
 </script>
 
 <template>
@@ -113,12 +168,14 @@ function onViewDetail(row: OrderLogRow) {
       <Form layout="inline" class="gap-y-3">
         <FormItem label="商户">
           <Select
-            v-model:value="searchForm.merchant"
-            :options="MERCHANT_OPTIONS"
+            v-model:value="searchForm.merchantId"
+            :dropdown-match-select-width="false"
+            :dropdown-style="{ minWidth: '280px' }"
+            :options="merchantOptions"
             allow-clear
-            class="w-40"
+            class="min-w-[220px]"
             option-filter-prop="label"
-            placeholder="商户"
+            placeholder="请选择商户"
             show-search
           />
         </FormItem>
@@ -161,6 +218,7 @@ function onViewDetail(row: OrderLogRow) {
       <Table
         :columns="columns"
         :data-source="list"
+        :loading="loading"
         :pagination="{ pageSize: 20, showSizeChanger: true }"
         :row-selection="{
           selectedRowKeys,
@@ -183,13 +241,21 @@ function onViewDetail(row: OrderLogRow) {
               </Button>
             </Tooltip>
           </template>
+          <template v-else-if="column.key === 'orderId'">
+            <span class="break-all font-mono text-xs">
+              {{ (record as OrderLogRow).orderId || '-' }}
+            </span>
+          </template>
           <template v-else-if="column.key === 'orderNo'">
             <span class="break-all font-mono text-xs">
-              {{ (record as OrderLogRow).orderNo }}
+              {{ (record as OrderLogRow).orderNo || '-' }}
             </span>
           </template>
           <template v-else-if="column.key === 'type'">
-            {{ LOG_TYPE_LABELS[(record as OrderLogRow).type] }}
+            {{
+              LOG_TYPE_LABELS[(record as OrderLogRow).type] ||
+              (record as OrderLogRow).type
+            }}
           </template>
           <template v-else-if="column.key === 'remark'">
             <Tooltip :title="(record as OrderLogRow).remark">
