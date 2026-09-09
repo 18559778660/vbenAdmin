@@ -1,7 +1,7 @@
 <script lang="ts" setup>
 import type { Dayjs } from 'dayjs';
 
-import type { OrderApi } from '#/api';
+import type { OrderApi, OrderLogApi } from '#/api';
 
 import { onMounted, reactive, ref } from 'vue';
 
@@ -17,15 +17,18 @@ import {
   FormItem,
   Input,
   message,
+  Modal,
   Row,
   Select,
   Space,
   Table,
   Tag,
+  Tooltip,
 } from 'ant-design-vue';
 
-import { getOrderList, getOrderSummary } from '#/api';
+import { getOrderList, getOrderLogList, getOrderSummary } from '#/api';
 
+import { LOG_TYPE_LABELS } from '../order-log/shared';
 import {
   ACCOUNT_OPTIONS,
   CARD_TYPE_OPTIONS,
@@ -49,6 +52,19 @@ const loading = ref(false);
 const list = ref<OrderApi.Order[]>([]);
 const selectedRowKeys = ref<string[]>([]);
 const summary = ref({ ...EMPTY_SUMMARY });
+
+const logModalOpen = ref(false);
+const logModalTitle = ref('订单日志');
+const logLoading = ref(false);
+const logList = ref<OrderLogApi.OrderLog[]>([]);
+
+const logColumns = [
+  { title: 'ID', dataIndex: 'id', key: 'id', width: 90 },
+  { title: '订单ID', dataIndex: 'orderId', key: 'orderId', width: 200 },
+  { title: '类型', key: 'type', width: 100 },
+  { title: '备注', dataIndex: 'remark', key: 'remark', ellipsis: true },
+  { title: '时间', dataIndex: 'createdAt', key: 'createdAt', width: 170 },
+];
 
 const pagination = reactive({
   current: 1,
@@ -138,6 +154,12 @@ const summaryColumns = [
 ];
 
 const columns = [
+  {
+    title: '操作',
+    key: 'actions',
+    width: 72,
+    fixed: 'left' as const,
+  },
   {
     title: '商家',
     dataIndex: 'merchantName',
@@ -268,6 +290,29 @@ function resetSearch() {
 
 function onToolbarAction(label: string) {
   message.info(`${label}（暂未接入）`);
+}
+
+function onViewDetail(row: OrderApi.Order) {
+  message.info(`查看详情（暂未接入）：${row.id}`);
+}
+
+async function onViewLogs(row: OrderApi.Order) {
+  const orderNo = (row.merchantOrder || '').trim();
+  if (!orderNo) {
+    message.warning('该订单没有订单号，无法查询日志');
+    return;
+  }
+  logModalTitle.value = `订单日志 - ${orderNo}`;
+  logModalOpen.value = true;
+  logLoading.value = true;
+  logList.value = [];
+  try {
+    logList.value = await getOrderLogList({ orderNo });
+  } catch {
+    message.error('加载订单日志失败');
+  } finally {
+    logLoading.value = false;
+  }
 }
 
 async function loadList() {
@@ -617,13 +662,37 @@ onMounted(() => {
           selectedRowKeys,
           onChange: onSelectionChange,
         }"
-        :scroll="{ x: 1900 }"
+        :scroll="{ x: 2040 }"
         row-key="id"
         size="small"
         @change="onTableChange"
       >
         <template #bodyCell="{ column, record }">
-          <template v-if="column.key === 'merchantOrder'">
+          <template v-if="column.key === 'actions'">
+            <div class="flex flex-col items-center gap-1 py-0.5">
+              <Tooltip title="查看详情">
+                <Button
+                  class="!flex !h-7 !w-7 !items-center !justify-center !p-0"
+                  size="small"
+                  type="primary"
+                  @click="onViewDetail(record as OrderApi.Order)"
+                >
+                  <IconifyIcon class="size-3.5" icon="lucide:eye" />
+                </Button>
+              </Tooltip>
+              <Tooltip title="日志">
+                <Button
+                  class="!flex !h-7 !w-7 !items-center !justify-center !p-0"
+                  size="small"
+                  type="primary"
+                  @click="onViewLogs(record as OrderApi.Order)"
+                >
+                  <IconifyIcon class="size-3.5" icon="lucide:file-text" />
+                </Button>
+              </Tooltip>
+            </div>
+          </template>
+          <template v-else-if="column.key === 'merchantOrder'">
             <span class="break-all font-mono text-xs">
               {{ (record as OrderApi.Order).merchantOrder || '-' }}
             </span>
@@ -650,6 +719,45 @@ onMounted(() => {
         </template>
       </Table>
     </Card>
+
+    <Modal
+      v-model:open="logModalOpen"
+      :footer="null"
+      :title="logModalTitle"
+      destroy-on-close
+      width="900px"
+    >
+      <Table
+        :columns="logColumns"
+        :data-source="logList"
+        :loading="logLoading"
+        :pagination="{ pageSize: 10, showSizeChanger: true }"
+        :scroll="{ x: 800 }"
+        row-key="id"
+        size="small"
+      >
+        <template #bodyCell="{ column, record }">
+          <template v-if="column.key === 'orderId'">
+            <span class="break-all font-mono text-xs">
+              {{ (record as OrderLogApi.OrderLog).orderId || '-' }}
+            </span>
+          </template>
+          <template v-else-if="column.key === 'type'">
+            {{
+              LOG_TYPE_LABELS[(record as OrderLogApi.OrderLog).type] ||
+              (record as OrderLogApi.OrderLog).type
+            }}
+          </template>
+          <template v-else-if="column.key === 'remark'">
+            <Tooltip :title="(record as OrderLogApi.OrderLog).remark">
+              <span class="block max-w-[420px] truncate">
+                {{ (record as OrderLogApi.OrderLog).remark }}
+              </span>
+            </Tooltip>
+          </template>
+        </template>
+      </Table>
+    </Modal>
   </Page>
 </template>
 
