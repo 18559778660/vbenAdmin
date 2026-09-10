@@ -165,6 +165,7 @@ export interface OrderDetailPreview {
   }>;
   goods: Array<{
     key: string;
+    link: string;
     name: string;
     price: string;
     quantity: number;
@@ -205,6 +206,7 @@ function parseOrderGoods(raw?: string): OrderDetailPreview['goods'] {
   }
   try {
     const list = JSON.parse(raw) as Array<{
+      link?: string;
       name?: string;
       price?: string;
       qty?: number;
@@ -217,6 +219,7 @@ function parseOrderGoods(raw?: string): OrderDetailPreview['goods'] {
     return list.map((item, index) => ({
       key: `goods-${index}`,
       name: displayText(item?.name),
+      link: (item?.link || '').trim(),
       sku: displayText(item?.sku),
       price: displayText(item?.price),
       quantity: Number(item?.qty) || 0,

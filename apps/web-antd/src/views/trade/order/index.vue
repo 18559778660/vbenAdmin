@@ -80,7 +80,7 @@ const paymentColumns = [
 
 const goodsColumns = [
   { title: '商品名', dataIndex: 'name', key: 'name' },
-  { title: 'SKU', dataIndex: 'sku', key: 'sku', width: 120 },
+  { title: 'SKU', dataIndex: 'sku', key: 'sku', minWidth: 280 },
   { title: '价格', dataIndex: 'price', key: 'price', width: 100 },
   { title: '数量', dataIndex: 'quantity', key: 'quantity', width: 80 },
   { title: '总价', dataIndex: 'total', key: 'total', width: 100 },
@@ -858,7 +858,16 @@ onMounted(() => {
           >
             <template #bodyCell="{ column, record }">
               <template v-if="column.key === 'name'">
-                <a class="text-blue-500">{{ record.name }}</a>
+                <a
+                  v-if="record.link"
+                  :href="record.link"
+                  class="text-blue-500"
+                  rel="noopener noreferrer"
+                  target="_blank"
+                >
+                  {{ record.name }}
+                </a>
+                <span v-else>{{ record.name }}</span>
               </template>
             </template>
           </Table>
