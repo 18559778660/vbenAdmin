@@ -1,7 +1,7 @@
 <script lang="ts" setup>
 import type { Dayjs } from 'dayjs';
 
-import type { OrderDetailPreview } from './shared';
+import type { OrderDetailPreview, ToolbarAction } from './shared';
 
 import type { OrderApi, OrderLogApi } from '#/api';
 
@@ -135,8 +135,8 @@ const searchForm = reactive({
   paidRange: undefined as [Dayjs, Dayjs] | undefined,
   createdRange: undefined as [Dayjs, Dayjs] | undefined,
   shipStatus: '' as '' | string,
-  country: '',
-  currency: '',
+  country: undefined as string | undefined,
+  currency: undefined as string | undefined,
   minAmount: '',
   maxAmount: '',
   cardBin: '',
@@ -299,8 +299,64 @@ function onTableChange(pag: { current?: number; pageSize?: number }) {
   }
 }
 
+function buildOrderListParams(): OrderApi.ListParams {
+  const params: OrderApi.ListParams = {};
+  if (searchForm.merchant) {
+    params.merchantId = searchForm.merchant;
+  }
+  if (searchForm.email.trim()) {
+    params.email = searchForm.email.trim();
+  }
+  if (searchForm.phone.trim()) {
+    params.phone = searchForm.phone.trim();
+  }
+  if (searchForm.ip.trim()) {
+    params.ip = searchForm.ip.trim();
+  }
+  if (searchForm.orderNo.trim()) {
+    params.orderNo = searchForm.orderNo.trim();
+  }
+  if (searchForm.siteA) {
+    params.siteA = searchForm.siteA;
+  }
+  if (searchForm.status) {
+    params.status = searchForm.status as OrderApi.Status;
+  }
+  if (searchForm.payMethod) {
+    params.payMethod = searchForm.payMethod;
+  }
+  if (searchForm.accountId) {
+    params.accountId = searchForm.accountId;
+  }
+  if (searchForm.siteB) {
+    params.siteB = searchForm.siteB;
+  }
+  if (searchForm.createdRange?.[0] && searchForm.createdRange?.[1]) {
+    params.createdFrom = searchForm.createdRange[0].format(
+      'YYYY-MM-DD HH:mm:ss',
+    );
+    params.createdTo = searchForm.createdRange[1].format('YYYY-MM-DD HH:mm:ss');
+  }
+  if (searchForm.country) {
+    params.country = searchForm.country;
+  }
+  if (searchForm.currency) {
+    params.currency = searchForm.currency;
+  }
+  if (searchForm.minAmount.trim()) {
+    params.minAmount = searchForm.minAmount.trim();
+  }
+  if (searchForm.maxAmount.trim()) {
+    params.maxAmount = searchForm.maxAmount.trim();
+  }
+  if (searchForm.transactionNo.trim()) {
+    params.transactionNo = searchForm.transactionNo.trim();
+  }
+  return params;
+}
+
 function handleSearch() {
-  message.info('搜索暂未接入，当前仅展示全部订单');
+  pagination.current = 1;
   void loadList();
 }
 
@@ -320,8 +376,8 @@ function resetSearch() {
   searchForm.paidRange = undefined;
   searchForm.createdRange = undefined;
   searchForm.shipStatus = '';
-  searchForm.country = '';
-  searchForm.currency = '';
+  searchForm.country = undefined;
+  searchForm.currency = undefined;
   searchForm.minAmount = '';
   searchForm.maxAmount = '';
   searchForm.cardBin = '';
@@ -329,11 +385,108 @@ function resetSearch() {
   searchForm.billNo = '';
   searchForm.logisticsNo = '';
   searchForm.transactionNo = '';
+  pagination.current = 1;
   void loadList();
 }
 
-function onToolbarAction(label: string) {
-  message.info(`${label}（暂未接入）`);
+function csvEscape(value: unknown): string {
+  const text = String(value ?? '');
+  if (/[",\n\r]/.test(text)) {
+    return `"${text.replaceAll('"', '""')}"`;
+  }
+  return text;
+}
+
+function downloadCsv(filename: string, rows: string[][]) {
+  const content = rows
+    .map((row) => row.map((cell) => csvEscape(cell)).join(','))
+    .join('\r\n');
+  const blob = new Blob([`\uFEFF${content}`], {
+    type: 'text/csv;charset=utf-8;',
+  });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
+async function exportOrders() {
+  try {
+    const rows = await getOrderList(buildOrderListParams());
+    if (rows.length === 0) {
+      message.warning('当前筛选条件下没有可导出的订单');
+      return;
+    }
+    const header = [
+      '商家',
+      '订单号',
+      '支付中心单号',
+      '交易号',
+      'B站',
+      '支付通道',
+      '支付方式',
+      '支付账号',
+      '网站金额',
+      '交易金额',
+      '手续费',
+      '美元偏差',
+      '货币',
+      '下单站点',
+      '客户姓名',
+      '邮箱',
+      '电话',
+      'IP',
+      '账单国家',
+      '交易状态',
+      '返回信息',
+      '创建时间',
+      '更新时间',
+    ];
+    const data = rows.map((row) => [
+      row.merchantName || '',
+      row.merchantOrder || '',
+      row.id || '',
+      row.providerRef || '',
+      row.siteB || '',
+      row.channel || '',
+      row.provider || '',
+      row.accountName || '',
+      row.siteAmount || '',
+      row.tradeAmount || '',
+      row.fee || '',
+      row.usdDiff || '',
+      (row.currency || '').toUpperCase(),
+      row.merchantSite || '',
+      row.customerName || '',
+      row.customerEmail || '',
+      row.customerPhone || '',
+      row.customerIp || '',
+      row.billCountry || '',
+      STATUS_LABELS[row.status] || row.status || '',
+      row.errorMessage || '',
+      row.createdAt || '',
+      row.updatedAt || '',
+    ]);
+    const stamp = new Date()
+      .toISOString()
+      .slice(0, 19)
+      .replaceAll('T', '_')
+      .replaceAll(':', '');
+    downloadCsv(`订单导出_${stamp}.csv`, [header, ...data]);
+    message.success(`已导出 ${rows.length} 条订单`);
+  } catch {
+    message.error('订单导出失败');
+  }
+}
+
+function onToolbarAction(action: ToolbarAction) {
+  if (action.key === 'export') {
+    void exportOrders();
+    return;
+  }
+  message.info(`${action.label}（暂未接入）`);
 }
 
 function onViewDetail(row: OrderApi.Order) {
@@ -445,8 +598,9 @@ async function loadFilterOptions() {
 async function loadList() {
   loading.value = true;
   try {
+    const params = buildOrderListParams();
     const [orders, orderSummary] = await Promise.all([
-      getOrderList(),
+      getOrderList(params),
       getOrderSummary(),
     ]);
     list.value = orders;
@@ -460,6 +614,8 @@ async function loadList() {
       totalRate: orderSummary.totalRate || '0%',
       amountUsd: orderSummary.amountUsd || '0.00',
     };
+  } catch {
+    message.error('加载订单失败');
   } finally {
     loading.value = false;
   }
@@ -793,7 +949,7 @@ onMounted(() => {
               : ''
           "
           size="small"
-          @click="onToolbarAction(action.label)"
+          @click="onToolbarAction(action)"
         >
           <template v-if="action.icon" #icon>
             <IconifyIcon :icon="action.icon" />

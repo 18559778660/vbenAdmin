@@ -44,6 +44,26 @@ export namespace OrderApi {
     updatedAt: string;
   }
 
+  export interface ListParams {
+    merchantId?: number;
+    email?: string;
+    phone?: string;
+    ip?: string;
+    orderNo?: string;
+    siteA?: string;
+    status?: '' | Status;
+    payMethod?: string;
+    accountId?: number;
+    siteB?: string;
+    createdFrom?: string;
+    createdTo?: string;
+    country?: string;
+    currency?: string;
+    minAmount?: string;
+    maxAmount?: string;
+    transactionNo?: string;
+  }
+
   export interface Summary {
     totalCount: number;
     unpaidCount: number;
@@ -57,8 +77,8 @@ export namespace OrderApi {
 }
 
 /** 订单列表 */
-export async function getOrderList() {
-  return requestClient.get<OrderApi.Order[]>('/orders');
+export async function getOrderList(params?: OrderApi.ListParams) {
+  return requestClient.get<OrderApi.Order[]>('/orders', { params });
 }
 
 /** 订单汇总栏 */
