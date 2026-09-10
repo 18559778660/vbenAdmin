@@ -28,19 +28,26 @@ import {
   Tooltip,
 } from 'ant-design-vue';
 
-import { getOrderList, getOrderLogList, getOrderSummary } from '#/api';
+import {
+  getChannelAccountList,
+  getChannelPlatformOptions,
+  getCountryList,
+  getCurrencyList,
+  getMerchantOptions,
+  getOrderList,
+  getOrderLogList,
+  getOrderSummary,
+  getSiteAList,
+  getSiteBList,
+} from '#/api';
 
 import { LOG_TYPE_LABELS } from '../order-log/shared';
 import {
-  ACCOUNT_OPTIONS,
   buildOrderDetailPreview,
   CARD_TYPE_OPTIONS,
   CUSTOMER_TYPE_OPTIONS,
   EMPTY_SUMMARY,
-  MERCHANT_OPTIONS,
-  PAY_METHOD_OPTIONS,
   SHIP_STATUS_OPTIONS,
-  SITE_B_OPTIONS,
   STATUS_COLORS,
   STATUS_FILTER_OPTIONS,
   STATUS_LABELS,
@@ -55,6 +62,14 @@ const loading = ref(false);
 const list = ref<OrderApi.Order[]>([]);
 const selectedRowKeys = ref<string[]>([]);
 const summary = ref({ ...EMPTY_SUMMARY });
+
+const merchantOptions = ref<{ label: string; value: number }[]>([]);
+const payMethodOptions = ref<{ label: string; value: string }[]>([]);
+const accountOptions = ref<{ label: string; value: number }[]>([]);
+const siteAOptions = ref<{ label: string; value: string }[]>([]);
+const siteBOptions = ref<{ label: string; value: string }[]>([]);
+const currencyOptions = ref<{ label: string; value: string }[]>([]);
+const countryOptions = ref<{ label: string; value: string }[]>([]);
 
 const logModalOpen = ref(false);
 const logModalTitle = ref('订单日志');
@@ -103,19 +118,19 @@ const pagination = reactive({
   showTotal: (total: number) => `共 ${total} 条`,
 });
 
-/** 搜索表单：静态预留，暂不参与接口筛选 */
+/** 搜索表单：下拉已接真实数据，暂不参与接口筛选 */
 const searchForm = reactive({
-  merchant: undefined as string | undefined,
+  merchant: undefined as number | undefined,
   email: '',
   phone: '',
   ip: '',
   orderNo: '',
-  siteA: '',
+  siteA: undefined as string | undefined,
   status: '' as '' | string,
   customerType: '' as '' | string,
   originPayMethod: undefined as string | undefined,
   payMethod: undefined as string | undefined,
-  accountId: undefined as string | undefined,
+  accountId: undefined as number | undefined,
   siteB: undefined as string | undefined,
   paidRange: undefined as [Dayjs, Dayjs] | undefined,
   createdRange: undefined as [Dayjs, Dayjs] | undefined,
@@ -295,7 +310,7 @@ function resetSearch() {
   searchForm.phone = '';
   searchForm.ip = '';
   searchForm.orderNo = '';
-  searchForm.siteA = '';
+  searchForm.siteA = undefined;
   searchForm.status = '';
   searchForm.customerType = '';
   searchForm.originPayMethod = undefined;
@@ -345,6 +360,88 @@ async function onViewLogs(row: OrderApi.Order) {
   }
 }
 
+async function loadFilterOptions() {
+  const [
+    merchants,
+    platforms,
+    accounts,
+    siteAs,
+    siteBs,
+    currencies,
+    countries,
+  ] = await Promise.all([
+    getMerchantOptions(),
+    getChannelPlatformOptions(),
+    getChannelAccountList(),
+    getSiteAList(),
+    getSiteBList(),
+    getCurrencyList(),
+    getCountryList(),
+  ]);
+
+  merchantOptions.value = merchants.map((item) => {
+    const name = item.name || item.account || `#${item.id}`;
+    const label =
+      item.account && item.name && item.account !== item.name
+        ? `${item.name} (${item.account})`
+        : name;
+    return { label, value: item.id };
+  });
+
+  payMethodOptions.value = platforms.map((item) => ({
+    label: item.label || item.code || `#${item.id}`,
+    value: item.code,
+  }));
+
+  accountOptions.value = accounts.map((item) => {
+    const label =
+      (item.alias || '').trim() ||
+      (item.accountNo || '').trim() ||
+      `#${item.id}`;
+    return { label, value: item.id };
+  });
+
+  siteAOptions.value = siteAs
+    .map((item) => {
+      const domain = (item.domain || '').trim();
+      return {
+        label: domain || `#${item.id}`,
+        value: domain || String(item.id),
+      };
+    })
+    .filter((item) => item.value);
+
+  siteBOptions.value = siteBs
+    .map((item) => {
+      const domain = (item.domain || '').trim();
+      return {
+        label: domain || `#${item.id}`,
+        value: domain || String(item.id),
+      };
+    })
+    .filter((item) => item.value);
+
+  currencyOptions.value = currencies.map((item) => {
+    const code = (item.code || '').trim().toUpperCase();
+    const name = (item.name || '').trim();
+    return {
+      label:
+        name && name !== code ? `${name} (${code})` : code || `#${item.id}`,
+      value: code,
+    };
+  });
+
+  countryOptions.value = countries.map((item) => {
+    const code = (item.code || '').trim().toUpperCase();
+    const name = (item.name || '').trim();
+    return {
+      label:
+        name && name !== code ? `${name} (${code})` : code || `#${item.id}`,
+      value: code,
+    };
+  });
+}
+
 async function loadList() {
   loading.value = true;
   try {
@@ -369,6 +466,9 @@ async function loadList() {
 }
 
 onMounted(() => {
+  void loadFilterOptions().catch(() => {
+    message.error('加载筛选项失败');
+  });
   void loadList();
 });
 </script>
@@ -386,7 +486,7 @@ onMounted(() => {
             <FormItem label="商户">
               <Select
                 v-model:value="searchForm.merchant"
-                :options="MERCHANT_OPTIONS"
+                :options="merchantOptions"
                 allow-clear
                 class="w-full"
                 option-filter-prop="label"
@@ -434,10 +534,14 @@ onMounted(() => {
           </Col>
           <Col :xs="24" :sm="12" :xl="6">
             <FormItem label="下单站点">
-              <Input
+              <Select
                 v-model:value="searchForm.siteA"
+                :options="siteAOptions"
                 allow-clear
-                placeholder="请输入"
+                class="w-full"
+                option-filter-prop="label"
+                placeholder="请选择"
+                show-search
               />
             </FormItem>
           </Col>
@@ -469,7 +573,7 @@ onMounted(() => {
             <FormItem label="原支付方式">
               <Select
                 v-model:value="searchForm.originPayMethod"
-                :options="PAY_METHOD_OPTIONS"
+                :options="payMethodOptions"
                 allow-clear
                 class="w-full"
                 disabled
@@ -481,10 +585,12 @@ onMounted(() => {
             <FormItem label="支付方式">
               <Select
                 v-model:value="searchForm.payMethod"
-                :options="PAY_METHOD_OPTIONS"
+                :options="payMethodOptions"
                 allow-clear
                 class="w-full"
+                option-filter-prop="label"
                 placeholder="请选择"
+                show-search
               />
             </FormItem>
           </Col>
@@ -492,7 +598,7 @@ onMounted(() => {
             <FormItem label="账号">
               <Select
                 v-model:value="searchForm.accountId"
-                :options="ACCOUNT_OPTIONS"
+                :options="accountOptions"
                 allow-clear
                 class="w-full"
                 option-filter-prop="label"
@@ -505,7 +611,7 @@ onMounted(() => {
             <FormItem label="支付B站">
               <Select
                 v-model:value="searchForm.siteB"
-                :options="SITE_B_OPTIONS"
+                :options="siteBOptions"
                 allow-clear
                 class="w-full"
                 option-filter-prop="label"
@@ -550,20 +656,28 @@ onMounted(() => {
           </Col>
           <Col :xs="24" :sm="12" :xl="6">
             <FormItem label="国家">
-              <Input
+              <Select
                 v-model:value="searchForm.country"
+                :options="countryOptions"
                 allow-clear
-                placeholder="请输入"
+                class="w-full"
+                option-filter-prop="label"
+                placeholder="请选择"
+                show-search
               />
             </FormItem>
           </Col>
 
           <Col :xs="24" :sm="12" :xl="6">
             <FormItem label="货币">
-              <Input
+              <Select
                 v-model:value="searchForm.currency"
+                :options="currencyOptions"
                 allow-clear
-                placeholder="请输入"
+                class="w-full"
+                option-filter-prop="label"
+                placeholder="请选择"
+                show-search
               />
             </FormItem>
           </Col>

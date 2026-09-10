@@ -34,12 +34,6 @@ export const CUSTOMER_TYPE_OPTIONS = [
   { label: '老客', value: 'old' },
 ];
 
-export const PAY_METHOD_OPTIONS = [
-  { label: '全部', value: '' },
-  { label: 'stripe', value: 'stripe' },
-  { label: 'card', value: 'card' },
-];
-
 export const SHIP_STATUS_OPTIONS = [
   { label: '全部', value: '' },
   { label: '未发货', value: 'unshipped' },
@@ -51,25 +45,6 @@ export const CARD_TYPE_OPTIONS = [
   { label: '全部', value: '' },
   { label: '信用卡', value: 'credit' },
   { label: '借记卡', value: 'debit' },
-];
-
-export const MERCHANT_OPTIONS = [
-  { label: 'C53', value: 'C53' },
-  { label: 'C12', value: 'C12' },
-  { label: 'C88', value: 'C88' },
-  { label: 'WIN00012', value: 'WIN00012' },
-];
-
-export const ACCOUNT_OPTIONS = [
-  { label: '启用-FMS-110-战斧-瞿建军 ST-mingletrad.com', value: '1' },
-  { label: 'test_stripe', value: '2' },
-  { label: 'ST-demo-account-01', value: '3' },
-];
-
-export const SITE_B_OPTIONS = [
-  { label: 'mingletrad.com', value: 'mingletrad.com' },
-  { label: 'lidl1099.zenshop.cn', value: 'lidl1099.zenshop.cn' },
-  { label: 'shop-demo.com', value: 'shop-demo.com' },
 ];
 
 /** 汇总栏默认空值 */
