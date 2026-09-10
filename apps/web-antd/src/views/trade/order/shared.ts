@@ -133,3 +133,136 @@ export const TOOLBAR_ACTIONS: ToolbarAction[] = [
   { key: 'payTrend', label: '支付趋势', tone: 'primary' },
   { key: 'failedCallback', label: '失败回调', tone: 'danger', count: 0 },
 ];
+
+/** 订单详情弹窗结构（客户/地址/商品优先读下单快照） */
+export interface OrderDetailPreview {
+  orderNo: string;
+  customerName: string;
+  email: string;
+  phone: string;
+  orderStatus: string;
+  returnMessage: string;
+  billCountry: string;
+  billState: string;
+  billCity: string;
+  billZip: string;
+  billAddress: string;
+  amountText: string;
+  shipCountry: string;
+  shipState: string;
+  shipCity: string;
+  shipZip: string;
+  shipAddress: string;
+  ip: string;
+  payments: Array<{
+    accountName: string;
+    createdAt: string;
+    key: string;
+    payInfo: string;
+    provider: string;
+    siteB: string;
+    status: string;
+  }>;
+  goods: Array<{
+    key: string;
+    name: string;
+    price: string;
+    quantity: number;
+    size: string;
+    sku: string;
+    total: string;
+  }>;
+}
+
+/** 详情「返回信息」：按订单状态展示，失败/取消才用 errorMessage。 */
+function buildReturnMessage(order: OrderApi.Order): string {
+  const err = order.errorMessage?.trim();
+  switch (order.status) {
+    case 'cancelled':
+    case 'failed': {
+      return err || '-';
+    }
+    case 'paid': {
+      return 'paid (支付成功)';
+    }
+    case 'pending': {
+      return 'payment redirect!';
+    }
+    default: {
+      return '-';
+    }
+  }
+}
+
+function displayText(v?: null | string): string {
+  const s = (v || '').trim();
+  return s || '-';
+}
+
+function parseOrderGoods(raw?: string): OrderDetailPreview['goods'] {
+  if (!raw?.trim()) {
+    return [];
+  }
+  try {
+    const list = JSON.parse(raw) as Array<{
+      name?: string;
+      price?: string;
+      qty?: number;
+      sku?: string;
+      total?: string;
+    }>;
+    if (!Array.isArray(list)) {
+      return [];
+    }
+    return list.map((item, index) => ({
+      key: `goods-${index}`,
+      name: displayText(item?.name),
+      sku: displayText(item?.sku),
+      price: displayText(item?.price),
+      quantity: Number(item?.qty) || 0,
+      total: displayText(item?.total),
+      size: '-',
+    }));
+  } catch {
+    return [];
+  }
+}
+
+export function buildOrderDetailPreview(
+  order: OrderApi.Order,
+): OrderDetailPreview {
+  const returnMessage = buildReturnMessage(order);
+  const goods = parseOrderGoods(order.orderGoods);
+  return {
+    orderNo: order.merchantOrder || order.id,
+    customerName: displayText(order.customerName),
+    email: displayText(order.customerEmail),
+    phone: displayText(order.customerPhone),
+    orderStatus: STATUS_LABELS[order.status] || order.status || '-',
+    returnMessage,
+    billCountry: displayText(order.billCountry),
+    billState: displayText(order.billState),
+    billCity: displayText(order.billCity),
+    billZip: displayText(order.billZip),
+    billAddress: displayText(order.billAddress),
+    amountText: order.siteAmount || order.tradeAmount || '-',
+    shipCountry: displayText(order.shipCountry),
+    shipState: displayText(order.shipState),
+    shipCity: displayText(order.shipCity),
+    shipZip: displayText(order.shipZip),
+    shipAddress: displayText(order.shipAddress),
+    ip: displayText(order.customerIp),
+    payments: [
+      {
+        key: 'pay-1',
+        provider: order.provider || order.channel || 'stripe',
+        status: STATUS_LABELS[order.status] || order.status || '-',
+        payInfo: returnMessage,
+        createdAt: order.createdAt || '-',
+        accountName: order.accountName || '-',
+        siteB: order.siteB || '-',
+      },
+    ],
+    goods,
+  };
+}

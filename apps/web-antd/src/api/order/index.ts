@@ -25,6 +25,21 @@ export namespace OrderApi {
     usdDiff: string;
     status: Status;
     errorMessage?: string;
+    customerName?: string;
+    customerEmail?: string;
+    customerPhone?: string;
+    customerIp?: string;
+    billCountry?: string;
+    billState?: string;
+    billCity?: string;
+    billZip?: string;
+    billAddress?: string;
+    shipCountry?: string;
+    shipState?: string;
+    shipCity?: string;
+    shipZip?: string;
+    shipAddress?: string;
+    orderGoods?: string;
     createdAt: string;
     updatedAt: string;
   }

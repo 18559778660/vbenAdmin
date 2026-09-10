@@ -1,6 +1,8 @@
 <script lang="ts" setup>
 import type { Dayjs } from 'dayjs';
 
+import type { OrderDetailPreview } from './shared';
+
 import type { OrderApi, OrderLogApi } from '#/api';
 
 import { onMounted, reactive, ref } from 'vue';
@@ -31,6 +33,7 @@ import { getOrderList, getOrderLogList, getOrderSummary } from '#/api';
 import { LOG_TYPE_LABELS } from '../order-log/shared';
 import {
   ACCOUNT_OPTIONS,
+  buildOrderDetailPreview,
   CARD_TYPE_OPTIONS,
   CUSTOMER_TYPE_OPTIONS,
   EMPTY_SUMMARY,
@@ -57,6 +60,32 @@ const logModalOpen = ref(false);
 const logModalTitle = ref('订单日志');
 const logLoading = ref(false);
 const logList = ref<OrderLogApi.OrderLog[]>([]);
+
+const detailModalOpen = ref(false);
+const detail = ref<null | OrderDetailPreview>(null);
+
+const paymentColumns = [
+  { title: '所属支付', dataIndex: 'provider', key: 'provider', width: 100 },
+  { title: '交易状态', dataIndex: 'status', key: 'status', width: 100 },
+  { title: '支付信息', dataIndex: 'payInfo', key: 'payInfo', ellipsis: true },
+  { title: '添加时间', dataIndex: 'createdAt', key: 'createdAt', width: 170 },
+  {
+    title: '所属账号',
+    dataIndex: 'accountName',
+    key: 'accountName',
+    width: 180,
+  },
+  { title: '所属壳站', dataIndex: 'siteB', key: 'siteB', width: 160 },
+];
+
+const goodsColumns = [
+  { title: '商品名', dataIndex: 'name', key: 'name' },
+  { title: 'SKU', dataIndex: 'sku', key: 'sku', width: 120 },
+  { title: '价格', dataIndex: 'price', key: 'price', width: 100 },
+  { title: '数量', dataIndex: 'quantity', key: 'quantity', width: 80 },
+  { title: '总价', dataIndex: 'total', key: 'total', width: 100 },
+  { title: '尺寸', dataIndex: 'size', key: 'size', width: 100 },
+];
 
 const logColumns = [
   { title: 'ID', dataIndex: 'id', key: 'id', width: 90 },
@@ -293,7 +322,8 @@ function onToolbarAction(label: string) {
 }
 
 function onViewDetail(row: OrderApi.Order) {
-  message.info(`查看详情（暂未接入）：${row.id}`);
+  detail.value = buildOrderDetailPreview(row);
+  detailModalOpen.value = true;
 }
 
 async function onViewLogs(row: OrderApi.Order) {
@@ -719,6 +749,122 @@ onMounted(() => {
         </template>
       </Table>
     </Card>
+
+    <Modal
+      v-model:open="detailModalOpen"
+      :footer="null"
+      destroy-on-close
+      title="查看详情"
+      width="1100px"
+    >
+      <div v-if="detail" class="space-y-4">
+        <Card :bordered="false" class="bg-gray-50" size="small">
+          <div class="mb-3 rounded bg-gray-100 px-3 py-2 font-mono text-sm">
+            #{{ detail.orderNo }}
+          </div>
+          <div
+            class="grid grid-cols-2 gap-x-4 gap-y-3 text-sm md:grid-cols-3 xl:grid-cols-6"
+          >
+            <div>
+              <div class="text-gray-400">客户姓名</div>
+              <div>{{ detail.customerName }}</div>
+            </div>
+            <div>
+              <div class="text-gray-400">邮箱</div>
+              <div class="break-all">{{ detail.email }}</div>
+            </div>
+            <div>
+              <div class="text-gray-400">电话</div>
+              <div>{{ detail.phone }}</div>
+            </div>
+            <div>
+              <div class="text-gray-400">订单状态</div>
+              <div>{{ detail.orderStatus || '-' }}</div>
+            </div>
+            <div class="xl:col-span-2">
+              <div class="text-gray-400">返回信息</div>
+              <div>{{ detail.returnMessage || '-' }}</div>
+            </div>
+
+            <div>
+              <div class="text-gray-400">账单国家</div>
+              <div>{{ detail.billCountry }}</div>
+            </div>
+            <div>
+              <div class="text-gray-400">账单省/州</div>
+              <div>{{ detail.billState }}</div>
+            </div>
+            <div>
+              <div class="text-gray-400">账单城市</div>
+              <div>{{ detail.billCity }}</div>
+            </div>
+            <div>
+              <div class="text-gray-400">账单邮编</div>
+              <div>{{ detail.billZip }}</div>
+            </div>
+            <div>
+              <div class="text-gray-400">账单地址</div>
+              <div>{{ detail.billAddress }}</div>
+            </div>
+            <div>
+              <div class="text-gray-400">金额</div>
+              <div>{{ detail.amountText }}</div>
+            </div>
+
+            <div>
+              <div class="text-gray-400">配送国家</div>
+              <div>{{ detail.shipCountry }}</div>
+            </div>
+            <div>
+              <div class="text-gray-400">配送省/州</div>
+              <div>{{ detail.shipState }}</div>
+            </div>
+            <div>
+              <div class="text-gray-400">配送城市</div>
+              <div>{{ detail.shipCity }}</div>
+            </div>
+            <div>
+              <div class="text-gray-400">配送邮编</div>
+              <div>{{ detail.shipZip }}</div>
+            </div>
+            <div>
+              <div class="text-gray-400">配送地址</div>
+              <div>{{ detail.shipAddress }}</div>
+            </div>
+            <div>
+              <div class="text-gray-400">IP</div>
+              <div class="break-all">{{ detail.ip }}</div>
+            </div>
+          </div>
+        </Card>
+
+        <Card :bordered="false" size="small" title="支付记录">
+          <Table
+            :columns="paymentColumns"
+            :data-source="detail.payments"
+            :pagination="false"
+            row-key="key"
+            size="small"
+          />
+        </Card>
+
+        <Card :bordered="false" size="small" title="商品信息">
+          <Table
+            :columns="goodsColumns"
+            :data-source="detail.goods"
+            :pagination="false"
+            row-key="key"
+            size="small"
+          >
+            <template #bodyCell="{ column, record }">
+              <template v-if="column.key === 'name'">
+                <a class="text-blue-500">{{ record.name }}</a>
+              </template>
+            </template>
+          </Table>
+        </Card>
+      </div>
+    </Modal>
 
     <Modal
       v-model:open="logModalOpen"
