@@ -459,7 +459,8 @@ onMounted(() => {
                 :options="CUSTOMER_TYPE_OPTIONS"
                 allow-clear
                 class="w-full"
-                placeholder="请选择"
+                disabled
+                placeholder="暂无数据"
               />
             </FormItem>
           </Col>
@@ -471,7 +472,8 @@ onMounted(() => {
                 :options="PAY_METHOD_OPTIONS"
                 allow-clear
                 class="w-full"
-                placeholder="请选择"
+                disabled
+                placeholder="暂无数据"
               />
             </FormItem>
           </Col>
@@ -518,6 +520,7 @@ onMounted(() => {
               <RangePicker
                 v-model:value="searchForm.paidRange"
                 class="w-full"
+                disabled
                 show-time
                 format="YYYY-MM-DD HH:mm:ss"
               />
@@ -540,7 +543,8 @@ onMounted(() => {
                 :options="SHIP_STATUS_OPTIONS"
                 allow-clear
                 class="w-full"
-                placeholder="请选择"
+                disabled
+                placeholder="暂无数据"
               />
             </FormItem>
           </Col>
@@ -586,7 +590,8 @@ onMounted(() => {
               <Input
                 v-model:value="searchForm.cardBin"
                 allow-clear
-                placeholder="请输入"
+                disabled
+                placeholder="暂无数据"
               />
             </FormItem>
           </Col>
@@ -598,7 +603,8 @@ onMounted(() => {
                 :options="CARD_TYPE_OPTIONS"
                 allow-clear
                 class="w-full"
-                placeholder="请选择"
+                disabled
+                placeholder="暂无数据"
               />
             </FormItem>
           </Col>
@@ -607,7 +613,8 @@ onMounted(() => {
               <Input
                 v-model:value="searchForm.billNo"
                 allow-clear
-                placeholder="请输入"
+                disabled
+                placeholder="暂无数据"
               />
             </FormItem>
           </Col>
@@ -616,7 +623,8 @@ onMounted(() => {
               <Input
                 v-model:value="searchForm.logisticsNo"
                 allow-clear
-                placeholder="请输入"
+                disabled
+                placeholder="暂无数据"
               />
             </FormItem>
           </Col>
