@@ -92,6 +92,15 @@ export function domainHref(domain?: string) {
   return /^https?:\/\//i.test(value) ? value : `https://${value}`;
 }
 
+export function runDirectoryLogHref(domain?: string, runDirectory?: string) {
+  const base = domainHref(domain).replace(/\/+$/, '');
+  const dir = (runDirectory ?? '').trim().replaceAll(/^\/+|\/+$/g, '');
+  if (!base || !dir) {
+    return '';
+  }
+  return `${base}/${dir}/common/log/1.php`;
+}
+
 export function hasLinkAddressData(row: {
   account?: string;
   host?: string;

@@ -50,6 +50,7 @@ import {
   hasLinkAddressData,
   PAYMENT_MODE_COLORS,
   PAYMENT_MODE_LABELS,
+  runDirectoryLogHref,
   STATUS_FILTER_OPTIONS,
 } from './shared';
 
@@ -305,6 +306,10 @@ function onUpdateCode() {
   message.info('更新代码功能暂未接入');
 }
 
+function runDirectoryHref(row: SiteBApi.SiteB) {
+  return runDirectoryLogHref(row.domain, row.runDirectory);
+}
+
 function openGatewayList(row: SiteBApi.SiteB) {
   viewingDomain.value = row.domain;
   gatewayOpen.value = true;
@@ -514,7 +519,16 @@ onMounted(async () => {
             </div>
           </template>
           <template v-else-if="column.key === 'runDirectory'">
-            <span v-if="record.runDirectory">{{ record.runDirectory }}</span>
+            <a
+              v-if="runDirectoryHref(record as SiteBApi.SiteB)"
+              :href="runDirectoryHref(record as SiteBApi.SiteB)"
+              class="text-primary whitespace-nowrap"
+              rel="noopener noreferrer"
+              target="_blank"
+            >
+              {{ (record as SiteBApi.SiteB).runDirectory }}
+            </a>
+            <span v-else>{{ (record as SiteBApi.SiteB).runDirectory }}</span>
           </template>
           <template v-else-if="column.key === 'updated'">
             <div>{{ record.updatedBy }}</div>
