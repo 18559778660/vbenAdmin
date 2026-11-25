@@ -59,6 +59,15 @@ export namespace SiteBApi {
     remark: string;
     status: boolean;
   }
+
+  export interface UpdateCodeResult {
+    id: number;
+    domain: string;
+    ok: boolean;
+    deploy: string;
+    webhook: string;
+    message: string;
+  }
 }
 
 /** B 站列表 */
@@ -84,4 +93,12 @@ export async function setSiteBStatus(id: number, status: boolean) {
 /** B 站网关列表 */
 export async function getSiteBGateways(id: number) {
   return requestClient.get<SiteBApi.Gateway[]>(`/site-bs/${id}/gateways`);
+}
+
+/** 批量运行壳包部署并创建 Stripe webhook */
+export async function updateSiteBCode(ids: number[]) {
+  return requestClient.post<SiteBApi.UpdateCodeResult[]>(
+    '/site-bs/update-code',
+    { ids },
+  );
 }

@@ -34,6 +34,7 @@ import {
   getSiteBList,
   setSiteBStatus,
   updateSiteB,
+  updateSiteBCode,
 } from '#/api';
 
 import {
@@ -77,6 +78,7 @@ const createForm = reactive({
 
 const loading = ref(false);
 const saving = ref(false);
+const updatingCode = ref(false);
 const selectedRowKeys = ref<number[]>([]);
 const list = ref<SiteBApi.SiteB[]>([]);
 const platformOptions = ref<{ code: string; label: string; value: number }[]>(
@@ -303,7 +305,46 @@ function onUpdateCode() {
     message.warning('请先勾选要更新代码的记录');
     return;
   }
-  message.info('更新代码功能暂未接入');
+  const selected = list.value.filter((row) =>
+    selectedRowKeys.value.includes(row.id),
+  );
+  const names =
+    selected
+      .map((row) => row.domain)
+      .filter(Boolean)
+      .join('、') || `${selectedRowKeys.value.length} 个站点`;
+  Modal.confirm({
+    title: '确认更新代码',
+    content: `将对 ${names} 执行部署并创建 Stripe webhook。线上站点请谨慎操作，确定继续？`,
+    okText: '确定更新',
+    okType: 'danger',
+    cancelText: '取消',
+    async onOk() {
+      await runUpdateCode();
+    },
+  });
+}
+
+async function runUpdateCode() {
+  updatingCode.value = true;
+  try {
+    const results = await updateSiteBCode(selectedRowKeys.value);
+    const failed = results.filter((item) => !item.ok);
+    if (failed.length === 0) {
+      message.success(`已更新 ${results.length} 个站点`);
+    } else {
+      const first = failed[0];
+      message.warning(
+        `${results.length - failed.length} 个成功，${failed.length} 个失败：${first?.domain ?? ''} ${first?.message ?? ''}`.trim(),
+      );
+    }
+    selectedRowKeys.value = [];
+    await loadList();
+  } catch {
+    // 错误提示由 request 拦截器处理
+  } finally {
+    updatingCode.value = false;
+  }
 }
 
 function runDirectoryHref(row: SiteBApi.SiteB) {
@@ -433,7 +474,7 @@ onMounted(async () => {
             </template>
             新增
           </Button>
-          <Button type="primary" @click="onUpdateCode">
+          <Button type="primary" :loading="updatingCode" @click="onUpdateCode">
             <template #icon>
               <IconifyIcon icon="lucide:upload" />
             </template>
