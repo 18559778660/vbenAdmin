@@ -185,6 +185,58 @@ export async function uploadChannelPackage(id: number, file: File) {
   );
 }
 
+function headerValue(headers: unknown, name: string): string {
+  if (!headers || typeof headers !== 'object') {
+    return '';
+  }
+  const bag = headers as {
+    [key: string]: unknown;
+    get?: (key: string) => string | undefined;
+  };
+  if (typeof bag.get === 'function') {
+    return String(bag.get(name) ?? bag.get(name.toLowerCase()) ?? '');
+  }
+  return String(bag[name] ?? bag[name.toLowerCase()] ?? '');
+}
+
+function filenameFromContentDisposition(header: string): string {
+  if (!header) {
+    return '';
+  }
+  const utf = /filename\*=UTF-8''([^;]+)/i.exec(header);
+  if (utf?.[1]) {
+    return decodeURIComponent(utf[1].trim());
+  }
+  const quoted = /filename="([^"]+)"/i.exec(header);
+  if (quoted?.[1]) {
+    return quoted[1];
+  }
+  const plain = /filename=([^;]+)/i.exec(header);
+  return plain?.[1]?.trim().replaceAll(/^["']|["']$/g, '') ?? '';
+}
+
 export async function downloadChannelPackage(id: number) {
-  return requestClient.download<Blob>(`/channels/${id}/package`);
+  const resp = await requestClient.download<{
+    data: Blob;
+    headers: unknown;
+  }>(`/channels/${id}/package`, {
+    responseReturn: 'raw',
+  });
+  const blob = resp.data;
+  const head = new Uint8Array(await blob.slice(0, 1).arrayBuffer());
+  if (head[0] === 0x7b) {
+    const body = JSON.parse(await blob.text()) as {
+      code?: number;
+      msg?: string;
+    };
+    if (body.code !== 0) {
+      throw new Error(body.msg || '压缩包不存在');
+    }
+  }
+  const fileName =
+    headerValue(resp.headers, 'x-channel-package-name') ||
+    filenameFromContentDisposition(
+      headerValue(resp.headers, 'content-disposition'),
+    );
+  return { blob, fileName };
 }

@@ -551,13 +551,13 @@ async function downloadPackage(row: ChannelRow) {
     return;
   }
   try {
-    const blob = await downloadChannelPackage(row.id);
+    const { blob, fileName } = await downloadChannelPackage(row.id);
     downloadFileFromBlobPart({
-      fileName: row.packageName || `channel-${row.id}.zip`,
+      fileName: fileName || `channel-${row.id}.zip`,
       source: blob,
     });
-  } catch {
-    message.error('下载失败');
+  } catch (error) {
+    message.error(error instanceof Error ? error.message : '下载失败');
   }
 }
 
