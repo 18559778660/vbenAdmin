@@ -205,12 +205,20 @@ const columns = [
     fixed: 'left' as const,
   },
   {
+    // 数字自增序号 sn，不是支付中心单号 pc_
+    title: 'ID',
+    dataIndex: 'sn',
+    key: 'sn',
+    width: 80,
+  },
+  {
     title: '商家',
     dataIndex: 'merchantName',
     key: 'merchantName',
     width: 120,
   },
   {
+    // 商家/A站单号，不是支付中心单号 pc_
     title: '订单号',
     dataIndex: 'merchantOrder',
     key: 'merchantOrder',
@@ -420,6 +428,7 @@ async function exportOrders() {
       return;
     }
     const header = [
+      'ID',
       '商家',
       '订单号',
       '支付中心单号',
@@ -445,6 +454,7 @@ async function exportOrders() {
       '更新时间',
     ];
     const data = rows.map((row) => [
+      row.sn ? String(row.sn) : '',
       row.merchantName || '',
       row.merchantOrder || '',
       row.id || '',
@@ -999,6 +1009,9 @@ onMounted(() => {
                 </Button>
               </Tooltip>
             </div>
+          </template>
+          <template v-else-if="column.key === 'sn'">
+            {{ (record as OrderApi.Order).sn || '-' }}
           </template>
           <template v-else-if="column.key === 'merchantOrder'">
             <span class="break-all font-mono text-xs">

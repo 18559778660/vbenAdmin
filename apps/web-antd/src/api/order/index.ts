@@ -4,9 +4,13 @@ export namespace OrderApi {
   export type Status = 'cancelled' | 'created' | 'failed' | 'paid' | 'pending';
 
   export interface Order {
+    /** 支付中心单号 pc_…，业务主键；列表不单独展示 */
     id: string;
+    /** 列表「ID」：数字自增序号 */
+    sn: number;
     merchantId: number;
     merchantName: string;
+    /** 列表「订单号」：商家/A站单号，不是 pc_ */
     merchantOrder: string;
     merchantSite: string;
     providerRef: string;
