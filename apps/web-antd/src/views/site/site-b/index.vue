@@ -594,7 +594,21 @@ onMounted(async () => {
       title="新增"
       width="520px"
     >
-      <Form layout="vertical" class="pt-2">
+      <Form layout="vertical" autocomplete="off" class="pt-2">
+        <input
+          aria-hidden="true"
+          autocomplete="username"
+          class="pointer-events-none absolute h-0 w-0 overflow-hidden opacity-0"
+          tabindex="-1"
+          type="text"
+        />
+        <input
+          aria-hidden="true"
+          autocomplete="current-password"
+          class="pointer-events-none absolute h-0 w-0 overflow-hidden opacity-0"
+          tabindex="-1"
+          type="password"
+        />
         <FormItem label="域名" required>
           <Input v-model:value="createForm.domain" placeholder="请输入域名" />
           <div class="text-muted-foreground mt-1 text-xs">
@@ -628,12 +642,19 @@ onMounted(async () => {
           <div class="text-muted-foreground mt-1 text-xs">非必填，建议填写</div>
         </FormItem>
         <FormItem label="账号">
-          <Input v-model:value="createForm.account" placeholder="请输入账号" />
+          <Input
+            v-model:value="createForm.account"
+            autocomplete="off"
+            name="ftp-account"
+            placeholder="请输入账号"
+          />
           <div class="text-muted-foreground mt-1 text-xs">非必填，建议填写</div>
         </FormItem>
         <FormItem label="密码">
           <InputPassword
             v-model:value="createForm.password"
+            autocomplete="new-password"
+            name="ftp-password"
             placeholder="请输入密码"
           />
           <div class="text-muted-foreground mt-1 text-xs">非必填，建议填写</div>
@@ -665,7 +686,21 @@ onMounted(async () => {
       title="编辑"
       width="520px"
     >
-      <Form layout="vertical" class="pt-2">
+      <Form layout="vertical" autocomplete="off" class="pt-2">
+        <input
+          aria-hidden="true"
+          autocomplete="username"
+          class="pointer-events-none absolute h-0 w-0 overflow-hidden opacity-0"
+          tabindex="-1"
+          type="text"
+        />
+        <input
+          aria-hidden="true"
+          autocomplete="current-password"
+          class="pointer-events-none absolute h-0 w-0 overflow-hidden opacity-0"
+          tabindex="-1"
+          type="password"
+        />
         <FormItem label="通道平台">
           <div>{{ editForm.platformName }}</div>
         </FormItem>
@@ -680,12 +715,19 @@ onMounted(async () => {
           <div class="text-muted-foreground mt-1 text-xs">非必填，建议填写</div>
         </FormItem>
         <FormItem label="账号">
-          <Input v-model:value="editForm.account" placeholder="请输入账号" />
+          <Input
+            v-model:value="editForm.account"
+            autocomplete="off"
+            name="ftp-account"
+            placeholder="请输入账号"
+          />
           <div class="text-muted-foreground mt-1 text-xs">非必填，建议填写</div>
         </FormItem>
         <FormItem label="密码">
           <InputPassword
             v-model:value="editForm.password"
+            autocomplete="new-password"
+            name="ftp-password"
             placeholder="请输入密码"
           />
           <div class="text-muted-foreground mt-1 text-xs">非必填，建议填写</div>
