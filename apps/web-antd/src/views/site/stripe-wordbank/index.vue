@@ -44,6 +44,25 @@ const editingId = ref<null | number>(null);
 const selectedRowKeys = ref<number[]>([]);
 const list = ref<StripeWordBankRow[]>([]);
 
+const pagination = reactive({
+  current: 1,
+  pageSize: 10,
+  showSizeChanger: true,
+  pageSizeOptions: ['10', '20', '50', '100'],
+  showTotal: (total: number) => `共 ${total} 条`,
+});
+
+function onTableChange(pag: { current?: number; pageSize?: number }) {
+  if (pag.pageSize && pag.pageSize !== pagination.pageSize) {
+    pagination.pageSize = pag.pageSize;
+    pagination.current = 1;
+    return;
+  }
+  if (pag.current) {
+    pagination.current = pag.current;
+  }
+}
+
 const modalTitle = computed(() => (editingId.value ? '编辑' : '新增'));
 const isEditing = computed(() => editingId.value !== null);
 
@@ -202,7 +221,7 @@ onMounted(() => {
         :columns="columns"
         :data-source="list"
         :loading="loading"
-        :pagination="{ pageSize: 10, showSizeChanger: true }"
+        :pagination="pagination"
         :row-selection="{
           selectedRowKeys,
           onChange: onSelectionChange,
@@ -210,6 +229,7 @@ onMounted(() => {
         :scroll="{ x: 700 }"
         row-key="id"
         size="small"
+        @change="onTableChange"
       >
         <template #bodyCell="{ column, record }">
           <template v-if="column.key === 'actions'">
